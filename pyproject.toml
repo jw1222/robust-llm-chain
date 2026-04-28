@@ -1,0 +1,175 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "robust-llm-chain"
+version = "0.1.0a0"
+description = "Production-grade cross-vendor failover for LLM APIs"
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+authors = [
+    { name = "jwhan" },
+]
+keywords = ["llm", "anthropic", "openrouter", "langchain", "failover", "resilience"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+dependencies = [
+    "langchain-core>=0.3",
+]
+
+[project.optional-dependencies]
+anthropic = ["langchain-anthropic>=0.2"]
+openrouter = ["langchain-openai>=0.2"]
+memcached = ["aiomcache>=0.8"]
+# Placeholder extras (활성: v0.2)
+bedrock = ["langchain-aws>=0.2"]
+openai = ["langchain-openai>=0.2"]
+redis = ["redis>=5.0"]
+all = [
+    "langchain-anthropic>=0.2",
+    "langchain-openai>=0.2",
+    "aiomcache>=0.8",
+]
+dev = [
+    "ruff>=0.7",
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "pytest-cov>=5.0",
+    "radon>=6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/jwhan/robust-llm-chain"
+Documentation = "https://github.com/jwhan/robust-llm-chain#readme"
+Repository = "https://github.com/jwhan/robust-llm-chain"
+Issues = "https://github.com/jwhan/robust-llm-chain/issues"
+Changelog = "https://github.com/jwhan/robust-llm-chain/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/robust_llm_chain"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/robust_llm_chain",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "pyproject.toml",
+]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Ruff — lint + format
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # isort
+    "N",    # pep8-naming
+    "C901", # cyclomatic complexity
+    "PLR0912", # too-many-branches
+    "PLR0913", # too-many-arguments
+    "PLR0915", # too-many-statements
+    "RET",  # flake8-return (early return / unnecessary else)
+    "SIM",  # flake8-simplify
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "ASYNC", # flake8-async
+    "RUF",  # ruff-specific
+]
+# N818 — domain naming kept (AllProvidersFailed / BackendUnavailable / etc.) per
+# CONCEPT.md §14. CPython stdlib also mixes Error-suffixed and bare names
+# (KeyboardInterrupt, SystemExit, StopIteration). Kept consistent with the
+# documented surface to avoid widespread doc churn.
+ignore = ["N818"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-args = 8
+max-branches = 12
+max-statements = 50
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "PLR2004",  # magic numbers in tests OK
+    "PLR0913",  # complex test fixtures may have many args
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Mypy — strict type checking
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+disallow_any_explicit = false
+files = ["src/robust_llm_chain"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Pytest
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "integration: real API call (key required)",
+    "e2e: end-to-end multi-provider scenario",
+    "anthropic: requires ANTHROPIC_API_KEY",
+    "openrouter: requires OPENROUTER_API_KEY",
+    "bedrock: requires AWS credentials",
+    "memcached: requires running memcached",
+]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Coverage
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.coverage.run]
+source = ["src/robust_llm_chain"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "@overload",
+]
+show_missing = true

@@ -1,0 +1,103 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Python
+# ──────────────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# venv
+venv/
+env/
+ENV/
+.venv/
+.env_venv/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.cache
+.hypothesis/
+coverage.xml
+*.cover
+*.py,cover
+
+# Linters / type checkers
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+
+# ──────────────────────────────────────────────────────────────────────────────
+# uv
+# ──────────────────────────────────────────────────────────────────────────────
+# uv.lock 은 commit 한다 (CODING_STYLE §15.0 — reproducible build)
+# 다음만 무시:
+.python-version.local
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 환경 파일 (키 보관) — CODING_STYLE §10.6 / policies §1.4
+# ──────────────────────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.test
+.env.*.local
+# 단, example 은 commit 한다
+!.env.example
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 개인 메모 (gitignored — 사고 commit 방지)
+# BOOTSTRAP-PROMPT 명시: docs/start/PRIVATE_NOTES.md 는 절대 commit 금지
+# ──────────────────────────────────────────────────────────────────────────────
+docs/start/PRIVATE_NOTES.md
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Internal design docs — kept local, not pushed to public repo
+# (사용자 결정: public repo 에는 source code + README + LICENSE 만 노출)
+# ──────────────────────────────────────────────────────────────────────────────
+docs/
+
+# ──────────────────────────────────────────────────────────────────────────────
+# IDE / 에디터
+# ──────────────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Documentation 빌드 산출물
+# ──────────────────────────────────────────────────────────────────────────────
+docs/_build/
+site/
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Jupyter
+# ──────────────────────────────────────────────────────────────────────────────
+.ipynb_checkpoints
