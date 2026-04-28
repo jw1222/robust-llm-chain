@@ -1,10 +1,12 @@
 """Unit tests for ``robust_llm_chain.testing.FakeAdapter``.
 
 Phase 3 scope: text response, exception, install/registry behavior.
-Streaming chunks / delays land in Phase 4 alongside the stream executor.
+Phase 4 expansion: streaming chunks / first-token delay / usage_metadata /
+install replacement semantics.
 """
 
 import asyncio
+import time
 
 from langchain_core.messages import HumanMessage
 
@@ -100,3 +102,81 @@ def test_assert_inputs_accepts_when_call_matches():
         )
 
     asyncio.run(_run())
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Streaming scenarios — astream path via _astream
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_streams_chunks_in_configured_order():
+    """Configured chunks must be yielded in order. (LangChain may append a
+    trailing empty chunk via its callback wrapper — filter those out.)"""
+
+    async def _run():
+        adapter = install_fake_adapter()
+        adapter.set_response("p1", chunks=["alpha", "beta", "gamma"])
+        model = adapter.build(_spec("p1"))
+
+        received = [
+            str(chunk.content)
+            async for chunk in model.astream([HumanMessage(content="hi")])
+            if chunk.content
+        ]
+        assert received == ["alpha", "beta", "gamma"]
+
+    asyncio.run(_run())
+
+
+def test_first_token_delay_blocks_until_elapsed():
+    """``delay`` simulates a pending provider — first chunk only after wait."""
+
+    async def _run():
+        adapter = install_fake_adapter()
+        adapter.set_response("p1", chunks=["x"], delay=0.1)
+        model = adapter.build(_spec("p1"))
+
+        start = time.monotonic()
+        async for _chunk in model.astream([HumanMessage(content="hi")]):
+            elapsed = time.monotonic() - start
+            assert elapsed >= 0.1, f"first chunk arrived too early: {elapsed:.3f}s"
+            return
+
+    asyncio.run(_run())
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# usage_metadata propagation
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_usage_metadata_attached_to_ainvoke_response():
+    async def _run():
+        adapter = install_fake_adapter()
+        adapter.set_response("p1", text="hello", usage={"input_tokens": 10, "output_tokens": 20})
+        model = adapter.build(_spec("p1"))
+
+        result = await model.ainvoke([HumanMessage(content="hi")])
+        usage = result.usage_metadata
+        assert usage is not None
+        assert usage["input_tokens"] == 10
+        assert usage["output_tokens"] == 20
+        # total_tokens is auto-derived when caller omits it.
+        assert usage["total_tokens"] == 30
+
+    asyncio.run(_run())
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# install_fake_adapter — repeated calls keep registry single-entry
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_install_twice_replaces_with_latest_instance():
+    """Second ``install_fake_adapter`` overrides the first under the same ``type``."""
+    first = install_fake_adapter()
+    second = install_fake_adapter()
+    assert first is not second
+    assert get_adapter("fake") is second
+    # Registry still has exactly one entry for "fake".
+    assert sum(1 for k in _ADAPTER_REGISTRY if k == "fake") == 1
