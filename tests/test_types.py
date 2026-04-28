@@ -1,14 +1,21 @@
 """Unit tests for ``robust_llm_chain.types``.
 
 Phase 3 scope: ``TokenUsage`` arithmetic + ``ProviderSpec`` masking + basic
-dataclass shape. Wider tests (CostEstimate computation, ChainResult
-mutation) land in Phase 4 alongside the consuming modules.
+dataclass shape. Phase 4 adds ``ChainResult`` lifecycle mutability and the
+``RobustChainInput`` alias contract.
 """
 
+from typing import get_args
+
+from langchain_core.messages import AIMessage
+
 from robust_llm_chain.types import (
+    AttemptRecord,
+    ChainResult,
     ModelSpec,
     PricingSpec,
     ProviderSpec,
+    RobustChainInput,
     TimeoutConfig,
     TokenUsage,
 )
@@ -119,3 +126,71 @@ def test_timeout_config_defaults():
     assert t.first_token == 15.0
     assert t.total is None
     assert t.stream_cleanup == 2.0
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ChainResult — astream lifecycle requires mutability
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_chain_result_mutable_for_lifecycle():
+    """Astream commits provisional result first then mutates fields per stage.
+
+    The class must allow both ``attempts.append(...)`` and direct field
+    reassignment (``output``, ``usage``, ``provider_used``) so the five-stage
+    lifecycle in CONCEPT §8.0 / api-design §3.4 works.
+    """
+    spec = ProviderSpec(id="p1", type="fake", model=ModelSpec(model_id="m"))
+    other_spec = ProviderSpec(id="p2", type="fake", model=ModelSpec(model_id="m2"))
+    result = ChainResult(
+        input=[],
+        output=AIMessage(content=""),
+        usage=TokenUsage(),
+        cost=None,
+        provider_used=spec,
+        model_used=spec.model,
+        attempts=[],
+        elapsed_ms=0.0,
+    )
+
+    result.attempts.append(
+        AttemptRecord(
+            provider_id="p1",
+            provider_type="fake",
+            model_id="m",
+            phase="first_token",
+            elapsed_ms=10.0,
+            error_type="OverloadedError",
+            error_message="529",
+            fallback_eligible=True,
+            run_id=None,
+        )
+    )
+    assert len(result.attempts) == 1
+
+    # Final commit reassigns output / usage / provider_used.
+    result.output = AIMessage(content="done")
+    result.usage = TokenUsage(input_tokens=5, output_tokens=10, total_tokens=15)
+    result.provider_used = other_spec
+    result.model_used = other_spec.model
+    result.elapsed_ms = 1234.0
+
+    assert result.output.content == "done"
+    assert result.usage.input_tokens == 5
+    assert result.provider_used.id == "p2"
+    assert result.elapsed_ms == 1234.0
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# RobustChainInput — public type alias contract
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_robust_chain_input_alias_includes_expected_members():
+    """The alias must expose the three accepted Runnable input shapes."""
+    members = get_args(RobustChainInput.__value__)
+    member_reprs = {repr(m) for m in members}
+
+    assert str in members
+    assert any("PromptValue" in r for r in member_reprs)
+    assert any("BaseMessage" in r and "list" in r for r in member_reprs)
