@@ -41,11 +41,20 @@ class AnthropicAdapter:
         # ``max_tokens_to_sample`` / ``api_key``). ``populate_by_name=True`` is
         # set on ChatAnthropic so callers may use either name at runtime, but
         # using the aliases keeps mypy --strict green.
-        api_key = SecretStr(spec.api_key) if spec.api_key is not None else SecretStr("")
+        # When ``spec.api_key`` is ``None`` we omit the kwarg entirely so the
+        # ChatAnthropic ``default_factory`` reads ``ANTHROPIC_API_KEY`` from env.
+        max_tokens = spec.model.max_output_tokens or _DEFAULT_MAX_OUTPUT_TOKENS
+        if spec.api_key is None:
+            return ChatAnthropic(
+                model_name=spec.model.model_id,
+                max_tokens_to_sample=max_tokens,
+                timeout=None,
+                stop=None,
+            )
         return ChatAnthropic(
             model_name=spec.model.model_id,
-            max_tokens_to_sample=spec.model.max_output_tokens or _DEFAULT_MAX_OUTPUT_TOKENS,
-            api_key=api_key,
+            max_tokens_to_sample=max_tokens,
+            api_key=SecretStr(spec.api_key),
             timeout=None,
             stop=None,
         )

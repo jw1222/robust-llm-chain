@@ -68,6 +68,21 @@ def test_build_raises_provider_inactive_when_extras_missing(monkeypatch):
         raise AssertionError("expected ProviderInactive when extras missing")
 
 
+def test_build_falls_back_to_env_api_key_when_spec_api_key_is_none(monkeypatch):
+    """spec.api_key=None: ChatAnthropic must read ``ANTHROPIC_API_KEY`` via
+    its own ``default_factory``. Adapter must omit the kwarg rather than
+    pass an empty SecretStr (which would override the factory)."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-from-env-1234567890")
+    spec = ProviderSpec(
+        id="anthropic-direct",
+        type="anthropic",
+        model=ModelSpec(model_id="claude-haiku-4-5-20251001"),
+        api_key=None,
+    )
+    chat = AnthropicAdapter().build(spec)
+    assert chat.anthropic_api_key.get_secret_value() == "sk-ant-from-env-1234567890"
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # credentials_present()
 # ──────────────────────────────────────────────────────────────────────────────
