@@ -1,24 +1,46 @@
 """``RobustChain`` — public orchestrator with Hybrid API.
 
 Implements LangChain ``Runnable`` (``ainvoke`` / ``astream``) plus a
-convenience ``acall`` that returns ``ChainResult`` directly. Phase 4 (T10)
-fills in the actual logic; this Phase 3 stub keeps the constructor + public
-API surface stable so importers don't break.
+convenience ``acall`` that returns ``ChainResult`` directly. Round-robin
+across configured providers via ``ProviderResolver`` + ``IndexBackend``;
+streaming details (first-token timeout, bounded cleanup) live in
+``StreamExecutor``.
 """
 
+import asyncio
 import contextvars
 import logging
+import os
+import time
 from collections.abc import AsyncIterator
 from typing import Any, NoReturn
 
-from langchain_core.messages import BaseMessage, BaseMessageChunk
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage, BaseMessageChunk, HumanMessage
+from langchain_core.prompt_values import PromptValue
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable, RunnableConfig
 
+from robust_llm_chain._security import sanitize_message
+from robust_llm_chain.adapters import _ADAPTER_REGISTRY, get_adapter, register_adapter
+from robust_llm_chain.adapters.anthropic import AnthropicAdapter
+from robust_llm_chain.adapters.openrouter import OpenRouterAdapter
 from robust_llm_chain.backends import IndexBackend, LocalBackend
-from robust_llm_chain.errors import NoProvidersConfigured
+from robust_llm_chain.errors import (
+    AllProvidersFailed,
+    NoProvidersConfigured,
+    ProviderInactive,
+    ProviderTimeout,
+    StreamInterrupted,
+    is_fallback_eligible,
+)
+from robust_llm_chain.resolver import ProviderResolver
+from robust_llm_chain.stream import StreamExecutor
 from robust_llm_chain.types import (
+    AttemptRecord,
     ChainResult,
     CostEstimate,
+    ModelSpec,
     ProviderSpec,
     RobustChainInput,
     TimeoutConfig,
@@ -32,12 +54,26 @@ _LAST_RESULT: contextvars.ContextVar[ChainResult | None] = contextvars.ContextVa
     "_LAST_RESULT", default=None
 )
 
+# Built-in adapters registered lazily when a chain instance is created. A
+# placeholder dict ensures ``conftest._reset_adapter_registry`` snapshots them
+# on first chain construction inside a test, then restores after.
+_V01_ACTIVE_TYPES: frozenset[str] = frozenset({"anthropic", "openrouter"})
+_V02_PLACEHOLDER_TYPES: frozenset[str] = frozenset({"bedrock", "openai"})
+
+_TOTAL_TIMEOUT_BUFFER_SEC: float = 60.0
+_TOTAL_TIMEOUT_CAP_SEC: float = 360.0
+
+
+def _ensure_builtin_adapters_registered() -> None:
+    """Register ``anthropic`` / ``openrouter`` once per registry snapshot."""
+    if "anthropic" not in _ADAPTER_REGISTRY:
+        register_adapter(AnthropicAdapter())
+    if "openrouter" not in _ADAPTER_REGISTRY:
+        register_adapter(OpenRouterAdapter())
+
 
 class RobustChain(Runnable[RobustChainInput, BaseMessage]):
-    """Cross-vendor failover chain. LangChain ``Runnable`` + convenience methods.
-
-    Phase 4 (T10) wires up the resolver / stream executor / fallback loop.
-    """
+    """Cross-vendor failover chain. ``Runnable`` standard + ``acall`` convenience."""
 
     def __init__(
         self,
@@ -50,13 +86,23 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
     ) -> None:
         if not providers:
             raise NoProvidersConfigured("RobustChain requires at least one ProviderSpec.")
+        _ensure_builtin_adapters_registered()
         self._providers = list(providers)
         self._backend: IndexBackend = backend or LocalBackend()
         self._timeouts = timeouts or TimeoutConfig()
         self._temperature = temperature
         self._logger = logger or logging.getLogger("robust_llm_chain.chain")
+        self._resolver = ProviderResolver(
+            self._providers, self._backend, key=self._make_chain_key()
+        )
+        self._executor = StreamExecutor(
+            first_token_timeout=self._timeouts.first_token,
+            per_provider_timeout=self._timeouts.per_provider,
+            stream_cleanup_timeout=self._timeouts.stream_cleanup,
+        )
         self._total_usage = TokenUsage()
         self._total_cost: CostEstimate | None = None
+        self._totals_lock = asyncio.Lock()
 
     # ── factory ─────────────────────────────────────────────────────────────
 
@@ -66,13 +112,35 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
         model_ids: dict[str, str],
         **kwargs: Any,
     ) -> "RobustChain":
-        """Auto-build ``ProviderSpec`` list from standard env vars + ``model_ids``.
-
-        Phase 4 (T10) implementation. Active condition: env vars present AND
-        the provider type appears in ``model_ids``. Zero-active raises
-        ``NoProvidersConfigured``.
-        """
-        raise NotImplementedError("RobustChain.from_env is implemented in Phase 4 (T10).")
+        """Auto-build ``ProviderSpec`` list from standard env vars + ``model_ids``."""
+        _ensure_builtin_adapters_registered()
+        providers: list[ProviderSpec] = []
+        for ptype, model_id in model_ids.items():
+            if ptype in _V02_PLACEHOLDER_TYPES:
+                raise ProviderInactive(
+                    f"{ptype} adapter is installed but inactive in v0.1. "
+                    f"Currently active in v0.1: anthropic, openrouter. "
+                    f"Track v0.2 release for {ptype} support."
+                )
+            if ptype not in _V01_ACTIVE_TYPES:
+                continue
+            adapter = get_adapter(ptype)
+            creds = adapter.credentials_present(os.environ)
+            if creds is None:
+                continue
+            providers.append(
+                ProviderSpec(
+                    id=ptype,
+                    type=ptype,
+                    model=ModelSpec(model_id=model_id),
+                    api_key=creds.get("api_key"),
+                )
+            )
+        if not providers:
+            raise NoProvidersConfigured(
+                "from_env() found no active providers. Check env vars + model_ids alignment."
+            )
+        return cls(providers, **kwargs)
 
     # ── Runnable async surface ──────────────────────────────────────────────
 
@@ -82,8 +150,11 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
         config: RunnableConfig | None = None,
         **kwargs: Any,
     ) -> BaseMessage:
-        """Run with cross-vendor failover; return ``BaseMessage``. Phase 4 (T10)."""
-        raise NotImplementedError("RobustChain.ainvoke is implemented in Phase 4 (T10).")
+        """Run with cross-vendor failover; return ``BaseMessage`` only."""
+        messages = self._normalize_runnable_input(input)
+        result = await self._run_with_failover(messages, max_tokens=None, temperature=None)
+        _LAST_RESULT.set(result)
+        return result.output
 
     async def astream(
         self,
@@ -91,14 +162,10 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
         config: RunnableConfig | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[BaseMessageChunk]:
-        """Stream chunks; pre-commit silent fallback / post-commit ``StreamInterrupted``.
-
-        Phase 4 (T10) implementation.
-        """
-        raise NotImplementedError("RobustChain.astream is implemented in Phase 4 (T10).")
-        # Required so the function is recognized as an async generator.
-        if False:  # pragma: no cover
-            yield
+        """Stream chunks with pre-commit silent fallback / post-commit StreamInterrupted."""
+        messages = self._normalize_runnable_input(input)
+        async for chunk in self._astream_with_failover(messages, max_tokens=None, temperature=None):
+            yield chunk
 
     # ── Convenience: acall (returns ChainResult directly) ───────────────────
 
@@ -111,11 +178,13 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
         config: RunnableConfig | None = None,
         **template_inputs: Any,
     ) -> ChainResult:
-        """Run with cross-vendor failover; return ``ChainResult`` directly.
-
-        Phase 4 (T10) implementation.
-        """
-        raise NotImplementedError("RobustChain.acall is implemented in Phase 4 (T10).")
+        """Run with cross-vendor failover; return ``ChainResult`` directly."""
+        messages = self._normalize_acall_input(prompt, template_inputs)
+        result = await self._run_with_failover(
+            messages, max_tokens=max_tokens, temperature=temperature
+        )
+        _LAST_RESULT.set(result)
+        return result
 
     # ── Sync surface — Runnable contract requires the names. ────────────────
 
@@ -131,15 +200,330 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
 
     @property
     def total_token_usage(self) -> TokenUsage:
-        """Cumulative token usage across all calls. ``asyncio.Lock``-protected."""
+        """Cumulative token usage across all calls."""
         return self._total_usage
 
     @property
     def total_cost(self) -> CostEstimate | None:
-        """Cumulative cost (only when every call had ``ModelSpec.pricing``)."""
+        """Cumulative cost (only when calls had ``ModelSpec.pricing``)."""
         return self._total_cost
 
     @property
     def last_result(self) -> ChainResult | None:
         """``ChainResult`` from the most recent call in this contextvars scope."""
         return _LAST_RESULT.get()
+
+    # ── Internal helpers ────────────────────────────────────────────────────
+
+    def _make_chain_key(self) -> str:
+        ids = ",".join(p.id for p in self._providers)
+        return f"chain:{ids}"
+
+    def _compute_total_timeout(self) -> float:
+        if self._timeouts.total is not None:
+            return self._timeouts.total
+        derived = self._timeouts.per_provider * len(self._providers) + _TOTAL_TIMEOUT_BUFFER_SEC
+        return min(derived, _TOTAL_TIMEOUT_CAP_SEC)
+
+    def _normalize_runnable_input(self, input: RobustChainInput) -> list[BaseMessage]:
+        if isinstance(input, str):
+            return [HumanMessage(content=input)]
+        if isinstance(input, PromptValue):
+            return list(input.to_messages())
+        if isinstance(input, list):
+            return input
+        raise TypeError(f"Unsupported input type for ainvoke/astream: {type(input).__name__}")
+
+    def _normalize_acall_input(
+        self, prompt: Any, template_inputs: dict[str, Any]
+    ) -> list[BaseMessage]:
+        if isinstance(prompt, str):
+            return [HumanMessage(content=prompt)]
+        if isinstance(prompt, ChatPromptTemplate):
+            return list(prompt.format_messages(**template_inputs))
+        if isinstance(prompt, list):
+            return prompt
+        raise TypeError(f"Unsupported prompt type for acall: {type(prompt).__name__}")
+
+    def _build_model(
+        self,
+        spec: ProviderSpec,
+        max_tokens_override: int | None,
+        temperature_override: float | None,
+    ) -> BaseChatModel | Runnable[Any, Any]:
+        adapter = get_adapter(spec.type)
+        base = adapter.build(spec)
+        bind_kwargs: dict[str, Any] = {}
+        if max_tokens_override is not None:
+            bind_kwargs["max_tokens"] = max_tokens_override
+        # temperature: per-call override > chain default. (chain default is
+        # always set, so temperature is always bound; this keeps behavior
+        # consistent across providers regardless of their own defaults.)
+        bind_kwargs["temperature"] = (
+            temperature_override if temperature_override is not None else self._temperature
+        )
+        return base.bind(**bind_kwargs)
+
+    def _record_attempt(
+        self,
+        spec: ProviderSpec,
+        phase: str,
+        start: float,
+        exc: BaseException | None,
+        eligible: bool,
+    ) -> AttemptRecord:
+        elapsed_ms = (time.monotonic() - start) * 1000
+        return AttemptRecord(
+            provider_id=spec.id,
+            provider_type=spec.type,
+            model_id=spec.model.model_id,
+            phase=phase,  # type: ignore[arg-type]
+            elapsed_ms=elapsed_ms,
+            error_type=type(exc).__name__ if exc is not None else None,
+            error_message=sanitize_message(str(exc)) if exc is not None else None,
+            fallback_eligible=eligible,
+            run_id=None,
+        )
+
+    def _compute_cost(self, model_spec: ModelSpec, usage: TokenUsage) -> CostEstimate | None:
+        pricing = model_spec.pricing
+        if pricing is None:
+            return None
+        cache_read_rate = (
+            pricing.cache_read_per_1m
+            if pricing.cache_read_per_1m is not None
+            else pricing.input_per_1m * 0.1
+        )
+        cache_write_rate = (
+            pricing.cache_write_per_1m
+            if pricing.cache_write_per_1m is not None
+            else pricing.input_per_1m * 1.25
+        )
+        scale = 1_000_000.0
+        input_cost = usage.input_tokens * pricing.input_per_1m / scale
+        output_cost = usage.output_tokens * pricing.output_per_1m / scale
+        cache_read_cost = usage.cache_read_tokens * cache_read_rate / scale
+        cache_write_cost = usage.cache_write_tokens * cache_write_rate / scale
+        total = input_cost + output_cost + cache_read_cost + cache_write_cost
+        return CostEstimate(
+            input_cost=input_cost,
+            output_cost=output_cost,
+            cache_read_cost=cache_read_cost,
+            cache_write_cost=cache_write_cost,
+            total_cost=total,
+            currency=pricing.currency,
+        )
+
+    async def _update_totals(self, result: ChainResult) -> None:
+        async with self._totals_lock:
+            self._total_usage += result.usage
+            if result.cost is None:
+                return
+            if self._total_cost is None:
+                self._total_cost = result.cost
+                return
+            self._total_cost = CostEstimate(
+                input_cost=self._total_cost.input_cost + result.cost.input_cost,
+                output_cost=self._total_cost.output_cost + result.cost.output_cost,
+                cache_read_cost=self._total_cost.cache_read_cost + result.cost.cache_read_cost,
+                cache_write_cost=(self._total_cost.cache_write_cost + result.cost.cache_write_cost),
+                total_cost=self._total_cost.total_cost + result.cost.total_cost,
+                currency=self._total_cost.currency,
+            )
+
+    async def _run_with_failover(
+        self,
+        messages: list[BaseMessage],
+        *,
+        max_tokens: int | None,
+        temperature: float | None,
+    ) -> ChainResult:
+        """Non-streaming failover loop wrapped by ``total`` timeout."""
+        start = time.monotonic()
+        attempts: list[AttemptRecord] = []
+        try:
+            result = await asyncio.wait_for(
+                self._failover_loop(messages, attempts, start, max_tokens, temperature),
+                timeout=self._compute_total_timeout(),
+            )
+        except TimeoutError as e:
+            elapsed_ms = (time.monotonic() - start) * 1000
+            raise ProviderTimeout(phase="total", elapsed_ms=elapsed_ms) from e
+        await self._update_totals(result)
+        return result
+
+    async def _failover_loop(
+        self,
+        messages: list[BaseMessage],
+        attempts: list[AttemptRecord],
+        start: float,
+        max_tokens: int | None,
+        temperature: float | None,
+    ) -> ChainResult:
+        last_error: BaseException | None = None
+        for _ in range(len(self._providers)):
+            spec = await self._resolver.next()
+            attempt_start = time.monotonic()
+            try:
+                model = self._build_model(spec, max_tokens, temperature)
+            except ProviderInactive:
+                attempts.append(
+                    self._record_attempt(spec, "model_creation", attempt_start, None, False)
+                )
+                raise
+            try:
+                output, usage = await self._executor.collect(model, messages)
+            except Exception as exc:
+                eligible = is_fallback_eligible(exc)
+                attempts.append(self._record_attempt(spec, "stream", attempt_start, exc, eligible))
+                last_error = exc
+                if eligible:
+                    continue
+                raise
+            attempts.append(self._record_attempt(spec, "stream", attempt_start, None, False))
+            return ChainResult(
+                input=messages,
+                output=output,
+                usage=usage,
+                cost=self._compute_cost(spec.model, usage),
+                provider_used=spec,
+                model_used=spec.model,
+                attempts=attempts,
+                elapsed_ms=(time.monotonic() - start) * 1000,
+            )
+        raise AllProvidersFailed(attempts=attempts) from last_error
+
+    async def _astream_with_failover(
+        self,
+        messages: list[BaseMessage],
+        *,
+        max_tokens: int | None,
+        temperature: float | None,
+    ) -> AsyncIterator[BaseMessageChunk]:
+        start = time.monotonic()
+        attempts: list[AttemptRecord] = []
+        result = self._provisional_result(messages, attempts)
+        _LAST_RESULT.set(result)
+
+        last_error: BaseException | None = None
+        for _ in range(len(self._providers)):
+            spec = await self._resolver.next()
+            first_chunk, agen, attempt_start, exc = await self._try_first_chunk(
+                spec, messages, attempts, max_tokens, temperature
+            )
+            if first_chunk is None:
+                last_error = exc
+                continue
+            # Post-commit phase. Ownership transferred to the caller.
+            assert agen is not None
+            try:
+                async for chunk in self._post_commit_stream(
+                    first_chunk, agen, spec, result, attempt_start, attempts, start
+                ):
+                    yield chunk
+            finally:
+                # StreamExecutor.stream's own finally handles aclose.
+                pass
+            await self._update_totals(result)
+            return
+
+        raise AllProvidersFailed(attempts=attempts) from last_error
+
+    def _provisional_result(
+        self, messages: list[BaseMessage], attempts: list[AttemptRecord]
+    ) -> ChainResult:
+        first_spec = self._providers[0]
+        return ChainResult(
+            input=messages,
+            output=AIMessage(content=""),
+            usage=TokenUsage(),
+            cost=None,
+            provider_used=first_spec,
+            model_used=first_spec.model,
+            attempts=attempts,
+            elapsed_ms=0.0,
+        )
+
+    async def _try_first_chunk(
+        self,
+        spec: ProviderSpec,
+        messages: list[BaseMessage],
+        attempts: list[AttemptRecord],
+        max_tokens: int | None,
+        temperature: float | None,
+    ) -> "tuple[BaseMessageChunk | None, AsyncIterator[BaseMessageChunk] | None, float, BaseException | None]":  # noqa: E501
+        attempt_start = time.monotonic()
+        try:
+            model = self._build_model(spec, max_tokens, temperature)
+        except ProviderInactive:
+            attempts.append(
+                self._record_attempt(spec, "model_creation", attempt_start, None, False)
+            )
+            raise
+        agen = self._executor.stream(model, messages)
+        try:
+            first = await agen.__anext__()
+        except ProviderTimeout as exc:
+            attempts.append(self._record_attempt(spec, "first_token", attempt_start, exc, True))
+            return None, None, attempt_start, exc
+        except StopAsyncIteration as exc:
+            empty = RuntimeError("empty stream")
+            attempts.append(self._record_attempt(spec, "stream", attempt_start, empty, True))
+            return None, None, attempt_start, exc
+        except Exception as exc:
+            eligible = is_fallback_eligible(exc)
+            attempts.append(self._record_attempt(spec, "first_token", attempt_start, exc, eligible))
+            if eligible:
+                return None, None, attempt_start, exc
+            raise
+        return first, agen, attempt_start, None
+
+    async def _post_commit_stream(
+        self,
+        first_chunk: BaseMessageChunk,
+        agen: AsyncIterator[BaseMessageChunk],
+        spec: ProviderSpec,
+        result: ChainResult,
+        attempt_start: float,
+        attempts: list[AttemptRecord],
+        start: float,
+    ) -> AsyncIterator[BaseMessageChunk]:
+        """Yield chunks once first one arrives. Mid-stream errors → StreamInterrupted."""
+        result.provider_used = spec
+        result.model_used = spec.model
+        accumulated: BaseMessageChunk = first_chunk
+        usage = TokenUsage()
+        _accumulate_usage(usage, first_chunk)
+        yield first_chunk
+        try:
+            async for chunk in agen:
+                accumulated = accumulated + chunk
+                _accumulate_usage(usage, chunk)
+                yield chunk
+        except Exception as exc:
+            attempts.append(self._record_attempt(spec, "stream", attempt_start, exc, False))
+            result.output = accumulated
+            result.usage = usage
+            result.elapsed_ms = (time.monotonic() - start) * 1000
+            raise StreamInterrupted(
+                f"stream interrupted after first chunk on provider={spec.id}"
+            ) from exc
+        attempts.append(self._record_attempt(spec, "stream", attempt_start, None, False))
+        result.output = accumulated
+        result.usage = usage
+        result.cost = self._compute_cost(spec.model, usage)
+        result.elapsed_ms = (time.monotonic() - start) * 1000
+
+
+def _accumulate_usage(usage: TokenUsage, chunk: BaseMessageChunk) -> None:
+    """Pull token counts off ``chunk.usage_metadata`` and add them to ``usage``."""
+    metadata = getattr(chunk, "usage_metadata", None)
+    if not metadata:
+        return
+    usage += TokenUsage(
+        input_tokens=int(metadata.get("input_tokens", 0)),
+        output_tokens=int(metadata.get("output_tokens", 0)),
+        cache_read_tokens=int(metadata.get("cache_read_input_tokens", 0)),
+        cache_write_tokens=int(metadata.get("cache_creation_input_tokens", 0)),
+        total_tokens=int(metadata.get("total_tokens", 0)),
+    )

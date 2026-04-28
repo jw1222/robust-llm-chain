@@ -8,10 +8,11 @@ calls. CONCEPT §15.
 import asyncio
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
+from langchain_core.messages.ai import UsageMetadata
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from pydantic import PrivateAttr
 
@@ -32,6 +33,9 @@ class FakeScenario:
     chunks: list[str] | None = None
     delay: float = 0.0
     usage: dict[str, int] | None = None
+    # Raised after the configured ``chunks`` have all been yielded — used to
+    # simulate post-commit streaming failures (StreamInterrupted scenarios).
+    chunks_exception: BaseException | None = None
 
 
 @dataclass
@@ -41,6 +45,9 @@ class FakeAdapter:
     type: ClassVar[str] = "fake"
     _scenarios: dict[str, FakeScenario] = field(default_factory=dict)
     _calls: dict[str, list[list[BaseMessage]]] = field(default_factory=dict)
+    # Per-provider invocation kwargs (e.g. ``max_tokens`` / ``temperature``
+    # forwarded by ``RobustChain._build_model`` via ``model.bind(...)``).
+    _call_kwargs: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
     def set_response(
         self,
@@ -51,6 +58,7 @@ class FakeAdapter:
         chunks: list[str] | None = None,
         delay: float = 0.0,
         usage: dict[str, int] | None = None,
+        chunks_exception: BaseException | None = None,
     ) -> None:
         """Configure the response for ``provider_id``.
 
@@ -62,9 +70,16 @@ class FakeAdapter:
             chunks: Sequence yielded by ``astream``.
             delay: Sleep before the first chunk / response (simulates pending).
             usage: Returned as ``usage_metadata``.
+            chunks_exception: Raised after all configured ``chunks`` have been
+                yielded — simulates post-commit streaming failures.
         """
         self._scenarios[provider_id] = FakeScenario(
-            text=text, exception=exception, chunks=chunks, delay=delay, usage=usage
+            text=text,
+            exception=exception,
+            chunks=chunks,
+            delay=delay,
+            usage=usage,
+            chunks_exception=chunks_exception,
         )
 
     def assert_inputs(
@@ -83,10 +98,11 @@ class FakeAdapter:
         """Construct a ``_FakeChatModel`` bound to ``spec.id``'s scenario."""
         scenario = self._scenarios.get(spec.id, FakeScenario())
         model = _FakeChatModel(scenario=scenario, provider_id=spec.id)
-        # Bind the adapter's _calls dict via PrivateAttr so capture survives
+        # Bind the adapter's sinks via PrivateAttr so capture survives
         # Pydantic's model construction (which would otherwise replace
         # mutable field defaults with copies).
         model._calls_sink = self._calls
+        model._kwargs_sink = self._call_kwargs
         return model
 
     def credentials_present(self, env: Mapping[str, str]) -> dict[str, str] | None:
@@ -127,6 +143,7 @@ class _FakeChatModel(BaseChatModel):
     scenario: FakeScenario
     provider_id: str
     _calls_sink: dict[str, list[list[BaseMessage]]] = PrivateAttr(default_factory=dict)
+    _kwargs_sink: dict[str, list[dict[str, Any]]] = PrivateAttr(default_factory=dict)
 
     @property
     def _llm_type(self) -> str:
@@ -143,6 +160,7 @@ class _FakeChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         self._calls_sink.setdefault(self.provider_id, []).append(list(messages))
+        self._kwargs_sink.setdefault(self.provider_id, []).append(dict(kwargs))
         if self.scenario.delay:
             await asyncio.sleep(self.scenario.delay)
         if self.scenario.exception is not None:
@@ -159,6 +177,7 @@ class _FakeChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
         self._calls_sink.setdefault(self.provider_id, []).append(list(messages))
+        self._kwargs_sink.setdefault(self.provider_id, []).append(dict(kwargs))
         if self.scenario.delay:
             await asyncio.sleep(self.scenario.delay)
         if self.scenario.exception is not None:
@@ -168,8 +187,20 @@ class _FakeChatModel(BaseChatModel):
         if chunks is None:
             chunks = [self.scenario.text] if self.scenario.text else []
 
-        for piece in chunks:
-            yield ChatGenerationChunk(message=AIMessageChunk(content=piece))
+        usage_metadata = _to_usage_metadata(self.scenario.usage)
+        last_idx = len(chunks) - 1
+        for i, piece in enumerate(chunks):
+            # Attach usage_metadata to the final chunk so collectors that
+            # accumulate per-chunk usage (e.g. RobustChain via StreamExecutor)
+            # see the totals — mirrors how Anthropic / OpenAI SDKs report usage.
+            attach: UsageMetadata | None = (
+                cast(UsageMetadata, usage_metadata) if i == last_idx else None
+            )
+            message = AIMessageChunk(content=piece, usage_metadata=attach)
+            yield ChatGenerationChunk(message=message)
+
+        if self.scenario.chunks_exception is not None:
+            raise self.scenario.chunks_exception
 
 
 def _to_usage_metadata(usage: dict[str, int] | None) -> dict[str, int] | None:

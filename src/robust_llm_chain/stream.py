@@ -15,9 +15,10 @@ import contextlib
 import logging
 import time
 from collections.abc import AsyncIterator
+from typing import Any
 
-from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessageChunk, BaseMessage, BaseMessageChunk
+from langchain_core.runnables import Runnable
 
 from robust_llm_chain.errors import ProviderTimeout
 from robust_llm_chain.types import TokenUsage
@@ -41,7 +42,7 @@ class StreamExecutor:
 
     async def stream(
         self,
-        model: BaseChatModel,
+        model: Runnable[Any, Any],
         messages: list[BaseMessage],
     ) -> AsyncIterator[BaseMessageChunk]:
         """Yield chunks subject to first-token + per-provider timeouts.
@@ -88,7 +89,7 @@ class StreamExecutor:
 
     async def collect(
         self,
-        model: BaseChatModel,
+        model: Runnable[Any, Any],
         messages: list[BaseMessage],
     ) -> tuple[BaseMessage, TokenUsage]:
         """Run ``stream`` under the hood and combine chunks into a single message.
