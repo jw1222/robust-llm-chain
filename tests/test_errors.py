@@ -108,6 +108,34 @@ def test_typed_backend_unavailable_is_eligible():
     assert is_fallback_eligible(BackendUnavailable("memcached down"))
 
 
+# Stage 2 — SDK class-name matching (no import). The classifier reads
+# ``type(exc).__name__`` so it works without importing optional SDKs.
+
+
+def test_sdk_class_rate_limit_error_is_eligible():
+    class RateLimitError(Exception):
+        pass
+
+    assert is_fallback_eligible(RateLimitError("ignored message"))
+
+
+def test_sdk_class_overloaded_error_is_eligible():
+    class OverloadedError(Exception):
+        pass
+
+    assert is_fallback_eligible(OverloadedError("ignored message"))
+
+
+def test_sdk_class_authentication_error_takes_precedence_over_keywords():
+    """Stage 2 class match wins even if the message would match a keyword."""
+
+    class AuthenticationError(Exception):
+        pass
+
+    # Message contains 'timeout' (fallback keyword) but SDK class is non-recoverable.
+    assert is_fallback_eligible(AuthenticationError("timeout while authenticating")) is False
+
+
 def test_keyword_overloaded_is_eligible():
     assert is_fallback_eligible(RuntimeError("provider returned 529 Overloaded"))
 
