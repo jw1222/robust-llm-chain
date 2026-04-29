@@ -31,8 +31,9 @@ robust-llm-chain/
 │   ├── chain.py                       # RobustChain — orchestrator + Hybrid API
 │   ├── stream.py                      # StreamExecutor — first_token / chunks / cleanup
 │   ├── resolver.py                    # ProviderResolver — round-robin selection
+│   ├── cost.py                        # compute_cost — pure helper (USD per 1M tokens)
 │   ├── adapters/
-│   │   ├── __init__.py                # ProviderAdapter Protocol + registry
+│   │   ├── __init__.py                # ProviderAdapter Protocol + registry + helpers
 │   │   ├── anthropic.py               # AnthropicAdapter → ChatAnthropic
 │   │   ├── openrouter.py              # OpenRouterAdapter → ChatOpenAI(base_url=...)
 │   │   ├── openai.py                  # OpenAIAdapter → ChatOpenAI
@@ -86,7 +87,10 @@ Layer 4  resolver                    ← types, errors, backends/__init__
          testing/__init__            ← testing/fake_adapter, adapters/__init__
               │
               ▼
-Layer 5  chain                       ← types, errors, stream, resolver,
+Layer 4½ cost                        ← types
+              │
+              ▼
+Layer 5  chain                       ← types, errors, stream, resolver, cost,
                                        adapters/{__init__, anthropic, openrouter,
                                                  openai, bedrock},
                                        backends/{__init__, local}, _security,
@@ -108,7 +112,7 @@ Layer 6  __init__                    (re-exports — public surface)
 
 | Module | langchain-core | langchain-anthropic | langchain-openai | langchain-aws | aiomcache | langsmith |
 |---|---|---|---|---|---|---|
-| `types`, `errors`, `_security` | — | — | — | — | — | — |
+| `types`, `errors`, `_security`, `cost` | — | — | — | — | — | — |
 | `chain`, `stream`, `resolver` | ✓ (Runnable / messages) | — | — | — | — | — |
 | `adapters/anthropic` | ✓ | ✓ (extra) | — | — | — | — |
 | `adapters/openrouter`, `adapters/openai` | ✓ | — | ✓ (extra) | — | — | — |
@@ -362,7 +366,11 @@ streaming exception E
 from robust_llm_chain.errors    import AllProvidersFailed, ProviderTimeout, BackendUnavailable, ...
 from robust_llm_chain.errors    import is_fallback_eligible
 from robust_llm_chain.backends  import IndexBackend, LocalBackend, MemcachedBackend, MemcacheClient
-from robust_llm_chain.adapters  import ProviderAdapter, register_adapter, get_adapter
+from robust_llm_chain.adapters  import (
+    ProviderAdapter, register_adapter, get_adapter,
+    DEFAULT_MAX_OUTPUT_TOKENS, env_api_key_credentials,
+)
+from robust_llm_chain.cost      import compute_cost
 from robust_llm_chain.testing   import FakeAdapter, install_fake_adapter, ProviderOverloaded
 ```
 

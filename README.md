@@ -81,11 +81,10 @@ print(result.provider_used.id, result.usage)     # metadata
 | `pip install "robust-llm-chain[openai]"` | + `langchain-openai` (OpenAI Direct) |
 | `pip install "robust-llm-chain[bedrock]"` | + `langchain-aws` (AWS Bedrock — Claude / Llama / Nova / etc.) |
 | `pip install "robust-llm-chain[memcached]"` | + `aiomcache` (async client for worker-coordinated round-robin) |
-| `pip install "robust-llm-chain[redis]"` | + `redis` — **placeholder, activates in v0.2** |
 | `pip install "robust-llm-chain[anthropic,openrouter,bedrock,memcached]"` | Recommended v0.1 production combo (3-way Claude failover) |
 | `pip install "robust-llm-chain[all]"` | Every adapter and backend shipped in v0.1 |
 
-> **Placeholder extras policy:** `[redis]` installs fine but is inactive in v0.1. Calling it raises `ProviderInactive` with a clear message. Pre-installing lets you upgrade to v0.2 without dependency churn.
+> A `redis` backend extra is planned for v0.2 — not yet shippable in v0.1, so the extra is intentionally absent from the list above.
 
 The library does **not** depend on `python-dotenv`. Loading `.env` files is up to your application.
 
