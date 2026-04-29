@@ -1,15 +1,19 @@
 """Builder patterns — 4 production scenarios via ``RobustChain.builder()``.
 
 This is the canonical reference for ``RobustChain.builder()`` (the recommended
-configuration path — fluent, multi-key OK, fail-fast on missing env). For the
-explicit ``providers=[ProviderSpec(...)]`` path, see the inline code blocks
-in the README "Advanced usage" section.
+configuration path — fluent, multi-key OK, credentials passed as values). For
+the explicit ``providers=[ProviderSpec(...)]`` path, see the inline code
+blocks in the README "Advanced usage" section.
 
-The builder collapses the dict-vs-list semantic split: every pattern (single
-provider, multi-key, multi-region, cross-vendor) uses the same chained
-``add_*`` shape. It reads credentials from env vars by default (configurable
-``env_var=`` per ``add_*``) and **fails fast** with a ``KeyError`` if a
-credential is missing — opposite of ``from_env`` 's silent skip.
+The builder collapses the dict-vs-list semantic split: every pattern (single,
+multi-key, multi-region, cross-vendor) uses the same chained shape via two
+methods — ``add_provider(type=…)`` for single-key providers (Anthropic /
+OpenAI / OpenRouter), and ``add_bedrock(...)`` for the asymmetric Bedrock
+case (region + two credentials).
+
+**Credentials are passed as values** — ``api_key=os.environ["..."]`` here, but
+equally ``api_key=vault.get(...)`` from a secrets manager. The builder does
+not read env vars on your behalf.
 
 Run a single example:
     uv run python examples/builder.py multikey
@@ -52,16 +56,16 @@ def multikey() -> None:
     """Two Anthropic keys for double the rate limit.
 
     The pattern is **provider-agnostic** — the same shape works for every
-    single-key provider by swapping the method and env var prefix:
+    single-key provider by swapping ``type=`` and the env var prefix:
 
-    - Anthropic: ``ANTHROPIC_API_KEY_1`` / ``ANTHROPIC_API_KEY_2`` via ``add_anthropic``
-    - OpenAI:    ``OPENAI_API_KEY_1`` / ``OPENAI_API_KEY_2`` via ``add_openai``
-    - OpenRouter:``OPENROUTER_API_KEY_1`` / ``OPENROUTER_API_KEY_2`` via ``add_openrouter``
+    - Anthropic: ``ANTHROPIC_API_KEY_1`` / ``ANTHROPIC_API_KEY_2``
+    - OpenAI:    ``OPENAI_API_KEY_1`` / ``OPENAI_API_KEY_2``
+    - OpenRouter:``OPENROUTER_API_KEY_1`` / ``OPENROUTER_API_KEY_2``
     - Bedrock:   per-region credential pairs (see ``multiregion`` below)
 
     Naming convention is your call (``_1``/``_2``, ``_PRIMARY``/``_BACKUP``,
     ``_TEAM_A``/``_TEAM_B`` — whatever your secret store uses); the builder
-    only cares about the env var name you point it at via ``env_var=``.
+    only cares about the value you pass via ``api_key=``.
 
     Required env: ``ANTHROPIC_API_KEY_1``, ``ANTHROPIC_API_KEY_2``
     """
@@ -69,14 +73,16 @@ def multikey() -> None:
 
     chain = (
         RobustChain.builder()
-        .add_anthropic(
+        .add_provider(
+            type="anthropic",
             model="claude-haiku-4-5-20251001",
-            env_var="ANTHROPIC_API_KEY_1",
+            api_key=os.environ["ANTHROPIC_API_KEY_1"],
             id="anthropic-1",
         )
-        .add_anthropic(
+        .add_provider(
+            type="anthropic",
             model="claude-haiku-4-5-20251001",
-            env_var="ANTHROPIC_API_KEY_2",
+            api_key=os.environ["ANTHROPIC_API_KEY_2"],
             id="anthropic-2",
         )
         .build()
@@ -107,13 +113,25 @@ def three_way_claude() -> None:
 
     chain = (
         RobustChain.builder()
-        .add_anthropic(model="claude-haiku-4-5-20251001", priority=0)
+        .add_provider(
+            type="anthropic",
+            model="claude-haiku-4-5-20251001",
+            api_key=os.environ["ANTHROPIC_API_KEY"],
+            priority=0,
+        )
         .add_bedrock(
             model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
             region="us-east-1",
+            aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+            aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
             priority=1,
         )
-        .add_openrouter(model="anthropic/claude-haiku-4.5", priority=2)
+        .add_provider(
+            type="openrouter",
+            model="anthropic/claude-haiku-4.5",
+            api_key=os.environ["OPENROUTER_API_KEY"],
+            priority=2,
+        )
         .build()
     )
     result = asyncio.run(chain.acall("두 줄로 자기소개."))
@@ -135,8 +153,18 @@ def cross_vendor() -> None:
 
     chain = (
         RobustChain.builder()
-        .add_anthropic(model="claude-haiku-4-5-20251001", priority=0)
-        .add_openai(model="gpt-4o-mini", priority=1)
+        .add_provider(
+            type="anthropic",
+            model="claude-haiku-4-5-20251001",
+            api_key=os.environ["ANTHROPIC_API_KEY"],
+            priority=0,
+        )
+        .add_provider(
+            type="openai",
+            model="gpt-4o-mini",
+            api_key=os.environ["OPENAI_API_KEY"],
+            priority=1,
+        )
         .build()
     )
     result = asyncio.run(chain.acall("두 줄로 자기소개."))
@@ -158,14 +186,13 @@ def multiregion() -> None:
     region-level outage. That's the typical setup and what this example shows.
 
     For blast-radius isolation (separate IAM users per region, cross-account
-    deployments, etc.) pass per-region credentials explicitly — see the
-    commented-out variant below. The variant points the builder at *different*
-    env var names (``AWS_ACCESS_KEY_ID_EAST`` / ``AWS_SECRET_ACCESS_KEY_EAST``
-    / ``AWS_ACCESS_KEY_ID_WEST`` / ``AWS_SECRET_ACCESS_KEY_WEST``); those env
-    vars must be exported beforehand. Same naming-convention freedom as
-    ``multikey`` above (``_1``/``_2``, ``_PRIMARY``/``_BACKUP``, etc.). To
-    avoid env vars entirely, pass ``aws_access_key_id=`` /
-    ``aws_secret_access_key=`` and source the value from a secrets manager.
+    deployments, etc.) read distinct env vars per region — see the
+    commented-out variant below. The variant reads
+    ``AWS_ACCESS_KEY_ID_EAST`` / ``..._WEST`` etc.; those env vars must be
+    exported beforehand. Same naming-convention freedom as ``multikey``
+    above (``_1``/``_2``, ``_PRIMARY``/``_BACKUP``, etc.). To avoid env
+    vars entirely, source the value from a secrets manager:
+    ``aws_access_key_id=vault.get("aws/east/access_key_id")``.
 
     Required env: ``AWS_ACCESS_KEY_ID``, ``AWS_SECRET_ACCESS_KEY``
     """
@@ -176,12 +203,16 @@ def multiregion() -> None:
         .add_bedrock(
             model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
             region="us-east-1",
+            aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+            aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
             id="bedrock-east",
             priority=0,
         )
         .add_bedrock(
             model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
             region="us-west-2",
+            aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+            aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
             id="bedrock-west",
             priority=1,
         )
@@ -189,16 +220,16 @@ def multiregion() -> None:
         # .add_bedrock(
         #     model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
         #     region="us-east-1",
-        #     aws_access_key_env="AWS_ACCESS_KEY_ID_EAST",
-        #     aws_secret_env="AWS_SECRET_ACCESS_KEY_EAST",
+        #     aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID_EAST"],
+        #     aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY_EAST"],
         #     id="bedrock-east",
         #     priority=0,
         # )
         # .add_bedrock(
         #     model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
         #     region="us-west-2",
-        #     aws_access_key_env="AWS_ACCESS_KEY_ID_WEST",
-        #     aws_secret_env="AWS_SECRET_ACCESS_KEY_WEST",
+        #     aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID_WEST"],
+        #     aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY_WEST"],
         #     id="bedrock-west",
         #     priority=1,
         # )

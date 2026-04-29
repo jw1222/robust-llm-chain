@@ -4,6 +4,62 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-29
+
+### Changed (BREAKING) — Builder API 단일화
+
+`RobustChain.builder()` 의 4 typed `add_*` 메서드를 `add_provider(type=...)` + `add_bedrock(...)` 두 개로 통합하고, env 읽기를 builder 책임에서 호출자 책임으로 이양. 사용자 dogfooding 피드백 ("env_var 가 모호함 — 어디서 할당하느냐의 문제이지 builder 가 알 일이 아니다") 즉시 반영.
+
+**제거된 메서드**: `add_anthropic` / `add_openai` / `add_openrouter` (Anthropic / OpenAI / OpenRouter 의 시그니처가 env_var default 만 다른 거의 동일한 복붙 — `Literal["anthropic","openai","openrouter"]` 한 글자 분기로 통합 가능). `add_bedrock` 은 region + 2 credential 의 비대칭 구조라 단독 메서드로 유지.
+
+**제거된 kwargs**: `env_var=` (single-key), `aws_access_key_env=` / `aws_secret_env=` (Bedrock). builder 가 더 이상 `os.environ` 을 직접 읽지 않음 — 호출자가 `os.environ["..."]` / vault.get() / Secrets Manager 호출로 값을 만들어 `api_key=` 또는 `aws_access_key_id=` / `aws_secret_access_key=` 에 직접 전달.
+
+**왜**:
+1. `env_var=` 가 "어디서 가져오는가" (source) 와 "값 자체" (value) 를 한 kwarg 에 섞어 모호. `api_key=` 단일화로 source 는 호출자, value 는 builder 라는 책임 분리가 명확해짐.
+2. secrets manager / Vault / hardcoded test fixture 등 env 외 source 가 first-class — 더 이상 "env_var 라는 이름의 default 가 있는데 우회하려면 api_key=" 같은 escape-hatch 설명 불필요.
+3. 4 typed 메서드 (60+ LOC 복붙) → 2 메서드 (~30 LOC) 로 surface 감소, 신규 single-key provider (Cohere / Mistral / …) 추가 시 `Literal` 한 글자 추가만으로 가능.
+4. v0.2.0 ship 직후 (사용자 거의 없는 시점) — 마이그레이션 비용이 가장 낮은 타이밍.
+
+**마이그레이션** (before → after):
+
+```python
+# Before (v0.2.0)
+RobustChain.builder().add_anthropic(model="m").build()                       # env default
+RobustChain.builder().add_anthropic(model="m", env_var="ANTHROPIC_KEY_2").build()
+RobustChain.builder().add_anthropic(model="m", api_key="sk-...").build()
+RobustChain.builder().add_bedrock(model="m", region="us-east-1").build()     # AWS env default
+RobustChain.builder().add_bedrock(
+    model="m", region="us-east-1",
+    aws_access_key_env="AWS_KEY_EAST", aws_secret_env="AWS_SECRET_EAST",
+).build()
+
+# After (v0.3.0) — credential 은 모두 값으로
+import os
+RobustChain.builder().add_provider(
+    type="anthropic", model="m", api_key=os.environ["ANTHROPIC_API_KEY"],
+).build()
+RobustChain.builder().add_provider(
+    type="anthropic", model="m", api_key=os.environ["ANTHROPIC_KEY_2"],
+).build()
+RobustChain.builder().add_provider(
+    type="anthropic", model="m", api_key="sk-...",
+).build()
+RobustChain.builder().add_bedrock(
+    model="m", region="us-east-1",
+    aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+    aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+).build()
+RobustChain.builder().add_bedrock(
+    model="m", region="us-east-1",
+    aws_access_key_id=os.environ["AWS_KEY_EAST"],
+    aws_secret_access_key=os.environ["AWS_SECRET_EAST"],
+).build()
+```
+
+**영향 범위**: `RobustChain.from_env()` / 명시 `RobustChain(providers=[ProviderSpec(...)])` 두 path 는 무영향 — 변경은 builder API 안에서만. 모든 docs (README / README_KO Quickstart / "Provider configuration" matrix / examples/quickstart.py / examples/builder.py) 갱신, builder 모듈 docstring 재작성, 13 builder unit test 새 API 로 재작성 (env monkeypatch 패턴 → 직접 값 전달).
+
+**`SingleKeyProviderType`** (`Literal["anthropic","openai","openrouter"]`) 가 builder 모듈에서 export — 외부 코드가 type 을 좁힐 때 사용 가능.
+
 ### Removed (post-v0.2.0)
 - `examples/advanced.py` — `examples/builder.py` (v0.2.0) 와 같은 4 시나리오를 explicit `ProviderSpec` list 로 표현했던 예제. v0.2.0 에서 builder 가 권장 path 가 됐고 두 example 의 시나리오가 100% 중복이라 maintenance 부담만 ↑ (한 모델 ID 변경 시 두 file 수정). 사용자 명료성 + DRY 측면에서 builder.py 만 canonical 로 유지. explicit `providers=[ProviderSpec(...)]` path 가 필요한 경우 (config loader / orchestrator) README "Advanced usage" 의 inline 코드 블록이 reference 역할.
 

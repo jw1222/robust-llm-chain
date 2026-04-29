@@ -4,33 +4,53 @@ The two existing paths (``RobustChain.from_env`` / explicit
 ``RobustChain(providers=[...])``) differ in *capability*: ``from_env`` is
 dict-based and limited to one provider per type, the explicit list is
 verbose but expresses everything. The builder collapses that split — every
-pattern uses the same chained method shape:
+pattern (single, multi-key, multi-region, mixed) uses the same chained
+method shape:
 
     chain = (
         RobustChain.builder()
-        .add_anthropic(model="claude-haiku-4-5-20251001", env_var="ANTHROPIC_API_KEY_1")
-        .add_anthropic(
+        .add_provider(
+            type="anthropic",
             model="claude-haiku-4-5-20251001",
-            env_var="ANTHROPIC_API_KEY_2",
+            api_key=os.environ["ANTHROPIC_API_KEY_1"],
         )
-        .add_bedrock(model="anthropic.claude-haiku-4-5", region="us-east-1")
+        .add_provider(
+            type="anthropic",
+            model="claude-haiku-4-5-20251001",
+            api_key=os.environ["ANTHROPIC_API_KEY_2"],
+        )
+        .add_bedrock(
+            model="anthropic.claude-haiku-4-5",
+            region="us-east-1",
+            aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+            aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+        )
         .build()
     )
 
-**Credentials**: pass ``api_key=...`` explicitly (overrides env), or rely on
-the per-method default ``env_var`` (``ANTHROPIC_API_KEY`` etc.). If neither
-the explicit value nor the env var is present, a ``KeyError`` is raised
-immediately — fail-fast, opposite of ``from_env`` 's silent skip.
+**Credentials are passed as values, not env names.** Where the value comes
+from — env var, secrets manager, Vault, a literal for tests — is the
+caller's concern. The builder doesn't read env vars on your behalf. This
+keeps the API single-purpose (assemble specs) and avoids the ambiguous
+``env_var=`` kwarg that mixed *source* with *value*.
 
 **Auto-id**: when ``id=`` is not given, the builder assigns
 ``"<type>-<N>"`` (e.g. ``"anthropic-1"``, ``"anthropic-2"``) so every spec
 gets a unique label even with multi-key configurations.
+
+**Two methods, not N**:
+
+- ``add_provider(type=…)`` — single-key providers (Anthropic / OpenAI /
+  OpenRouter). The signature is identical across types; only the ``type``
+  literal changes.
+- ``add_bedrock(...)`` — Bedrock has a different shape (region + two
+  credentials), so it gets its own method instead of polluting
+  ``add_provider`` with kwargs that are dead weight for everyone else.
 """
 
 from __future__ import annotations
 
-import os
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, Literal, Self
 
 from robust_llm_chain.types import ModelSpec, ProviderSpec
 
@@ -38,101 +58,43 @@ if TYPE_CHECKING:
     from robust_llm_chain.chain import RobustChain
 
 
+SingleKeyProviderType = Literal["anthropic", "openai", "openrouter"]
+"""Providers whose only credential is a single ``api_key`` string."""
+
+
 class RobustChainBuilder:
-    """Collect ``ProviderSpec``s by chained ``add_*`` calls, then ``.build()``."""
+    """Collect ``ProviderSpec`` s by chained ``add_*`` calls, then ``.build()``."""
 
     def __init__(self) -> None:
         self._specs: list[ProviderSpec] = []
         self._counts: dict[str, int] = {}
-
-    # ── id helpers ──────────────────────────────────────────────────────────
 
     def _next_id(self, type_: str) -> str:
         """Return ``"<type>-<N>"`` (e.g. ``"anthropic-1"``)."""
         self._counts[type_] = self._counts.get(type_, 0) + 1
         return f"{type_}-{self._counts[type_]}"
 
-    @staticmethod
-    def _resolve_required_env(env_var: str) -> str:
-        """Read ``env_var`` from process env; raise ``KeyError`` if missing."""
-        try:
-            return os.environ[env_var]
-        except KeyError as exc:
-            raise KeyError(
-                f"{env_var} is not set in the environment. "
-                f"Either set the env var or pass the value explicitly."
-            ) from exc
+    # ── add methods ─────────────────────────────────────────────────────────
 
-    @classmethod
-    def _resolve_api_key(cls, env_var: str, api_key: str | None) -> str:
-        """Explicit ``api_key`` wins; otherwise read ``env_var``."""
-        if api_key is not None:
-            return api_key
-        return cls._resolve_required_env(env_var)
-
-    # ── add_* methods ───────────────────────────────────────────────────────
-
-    def add_anthropic(
+    def add_provider(
         self,
         *,
+        type: SingleKeyProviderType,
         model: str,
-        env_var: str = "ANTHROPIC_API_KEY",
-        api_key: str | None = None,
+        api_key: str,
         id: str | None = None,
         priority: int = 0,
     ) -> Self:
-        """Add an Anthropic Direct provider."""
-        resolved_key = self._resolve_api_key(env_var, api_key)
-        self._specs.append(
-            ProviderSpec(
-                id=id or self._next_id("anthropic"),
-                type="anthropic",
-                model=ModelSpec(model_id=model),
-                api_key=resolved_key,
-                priority=priority,
-            )
-        )
-        return self
+        """Add a single-key provider (Anthropic / OpenAI / OpenRouter).
 
-    def add_openrouter(
-        self,
-        *,
-        model: str,
-        env_var: str = "OPENROUTER_API_KEY",
-        api_key: str | None = None,
-        id: str | None = None,
-        priority: int = 0,
-    ) -> Self:
-        """Add an OpenRouter provider."""
-        resolved_key = self._resolve_api_key(env_var, api_key)
+        For Bedrock (region + two credentials) use :meth:`add_bedrock` instead.
+        """
         self._specs.append(
             ProviderSpec(
-                id=id or self._next_id("openrouter"),
-                type="openrouter",
+                id=id or self._next_id(type),
+                type=type,
                 model=ModelSpec(model_id=model),
-                api_key=resolved_key,
-                priority=priority,
-            )
-        )
-        return self
-
-    def add_openai(
-        self,
-        *,
-        model: str,
-        env_var: str = "OPENAI_API_KEY",
-        api_key: str | None = None,
-        id: str | None = None,
-        priority: int = 0,
-    ) -> Self:
-        """Add an OpenAI Direct provider."""
-        resolved_key = self._resolve_api_key(env_var, api_key)
-        self._specs.append(
-            ProviderSpec(
-                id=id or self._next_id("openai"),
-                type="openai",
-                model=ModelSpec(model_id=model),
-                api_key=resolved_key,
+                api_key=api_key,
                 priority=priority,
             )
         )
@@ -143,37 +105,24 @@ class RobustChainBuilder:
         *,
         model: str,
         region: str,
-        aws_access_key_env: str = "AWS_ACCESS_KEY_ID",
-        aws_secret_env: str = "AWS_SECRET_ACCESS_KEY",
-        aws_access_key_id: str | None = None,
-        aws_secret_access_key: str | None = None,
+        aws_access_key_id: str,
+        aws_secret_access_key: str,
         id: str | None = None,
         priority: int = 0,
     ) -> Self:
         """Add an AWS Bedrock provider.
 
-        Unlike single-key providers, Bedrock has **three** required pieces:
-        access key id, secret access key, and region. The region must be
-        passed explicitly (no env default) so multi-region configurations
-        are unambiguous.
+        Unlike single-key providers, Bedrock has *three* required pieces:
+        access key id, secret access key, and region. All three are passed
+        as values — read them from env / Secrets Manager / Vault yourself.
         """
-        ak = (
-            aws_access_key_id
-            if aws_access_key_id is not None
-            else self._resolve_required_env(aws_access_key_env)
-        )
-        sk = (
-            aws_secret_access_key
-            if aws_secret_access_key is not None
-            else self._resolve_required_env(aws_secret_env)
-        )
         self._specs.append(
             ProviderSpec(
                 id=id or self._next_id("bedrock"),
                 type="bedrock",
                 model=ModelSpec(model_id=model),
-                aws_access_key_id=ak,
-                aws_secret_access_key=sk,
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
                 region=region,
                 priority=priority,
             )
@@ -193,4 +142,4 @@ class RobustChainBuilder:
         return RobustChain(providers=self._specs, **kwargs)
 
 
-__all__ = ["RobustChainBuilder"]
+__all__ = ["RobustChainBuilder", "SingleKeyProviderType"]

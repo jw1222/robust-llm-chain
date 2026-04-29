@@ -4,7 +4,7 @@
 
 <!-- CI 배지는 Phase 3 에서 .github/workflows/ci.yml 가 준비되면 활성화 예정 -->
 [![CI](https://img.shields.io/badge/CI-pending-lightgrey.svg)](https://github.com/jw1222/robust-llm-chain/actions)
-[![PyPI](https://img.shields.io/badge/PyPI-0.2.0-blue.svg)](https://pypi.org/project/robust-llm-chain/)
+[![PyPI](https://img.shields.io/badge/PyPI-0.3.0-blue.svg)](https://pypi.org/project/robust-llm-chain/)
 [![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -48,12 +48,23 @@ pip install "robust-llm-chain[anthropic,openrouter]"
 
 ```python
 import asyncio
+import os
 from robust_llm_chain import RobustChain
 
 chain = (
     RobustChain.builder()
-    .add_anthropic(model="claude-haiku-4-5-20251001", priority=0)        # primary
-    .add_openrouter(model="anthropic/claude-haiku-4.5", priority=1)      # fallback
+    .add_provider(
+        type="anthropic",
+        model="claude-haiku-4-5-20251001",
+        api_key=os.environ["ANTHROPIC_API_KEY"],   # primary
+        priority=0,
+    )
+    .add_provider(
+        type="openrouter",
+        model="anthropic/claude-haiku-4.5",
+        api_key=os.environ["OPENROUTER_API_KEY"],  # fallback
+        priority=1,
+    )
     .build()
 )
 # acall: 운영 메타데이터가 포함된 ChainResult 를 반환하는 편의 메서드
@@ -66,13 +77,13 @@ print(f"used: {result.provider_used.id} | tokens: {result.usage}") # metadata
 
 **무슨 일이 일어나는가:**
 - fluent builder 로 두 provider 설정: Anthropic Direct (primary, `priority=0`) 와 폴백용 OpenRouter (`priority=1`).
-- `add_anthropic(...)` 는 default 로 `ANTHROPIC_API_KEY` env 에서 read; `add_openrouter(...)` 는 `OPENROUTER_API_KEY`. 다른 env var 사용 시 `env_var="..."` 전달, env lookup 자체를 우회하려면 `api_key="..."` 명시.
+- credential 은 **값** 으로 전달 (`api_key=...`). 그 값을 어디서 가져올지 — env var, secrets manager, Vault — 는 호출자 책임. builder 는 `os.environ` 을 절대 직접 읽지 않으므로 source 가 호출 site 에 명시적으로 드러난다.
 - Anthropic 이 529 / overloaded / pending 에 걸리면 요청은 OpenRouter 로 투명하게 페일오버된다. 추가 설정 없음.
-- env var 누락 시 즉시 `KeyError` (정확한 var 이름 포함, fail-fast — silent skip 아님).
+- env var 누락 시 → `os.environ["..."]` 가 정확한 var 이름과 함께 `KeyError` 를 던진다 (Python 표준 fail-fast).
 
 **기본값:** single-worker / `pricing=None` / `backend=LocalBackend()`. multi-worker 라운드 로빈, 비용 계산, multi-key / multi-region 패턴은 아래 [Provider 설정](#provider-설정--세-가지-path) 와 [Advanced usage](#advanced-usage) 참조.
 
-> **세 가지 설정 path** 가 있다 — `from_env` (env-driven dict, single-per-type), **`builder`** (fluent, multi-key 가능, fail-fast — 위에서 사용), 명시 `providers=[ProviderSpec(...)]` list. 비교 매트릭스는 [Provider 설정](#provider-설정--세-가지-path) 참조.
+> **세 가지 설정 path** 가 있다 — `from_env` (env-driven dict, single-per-type), **`builder`** (fluent, multi-key 가능, credential 은 값으로 전달 — 위에서 사용), 명시 `providers=[ProviderSpec(...)]` list. 비교 매트릭스는 [Provider 설정](#provider-설정--세-가지-path) 참조.
 
 ---
 
@@ -209,25 +220,25 @@ result.attempts                     # → [
 
 | Capability | `RobustChain.from_env(model_ids={...})` | **`RobustChain.builder().add_*(...).build()`** | `RobustChain(providers=[ProviderSpec(...)])` |
 |---|---|---|---|
-| credential source | env vars (자동 read, dict key = type) | `add_*` 별 env var (configurable) **또는** 명시 `api_key=...` | 명시 `api_key=...` (또는 `None` → SDK env fallback) |
+| credential source | env vars (자동 read, dict key = type) | **값** 으로 `api_key=` 전달 (env / vault / secrets manager 어디서든 읽어와서) | **값** 으로 `api_key=` 전달 |
 | model_id source | dict value | `model="..."` keyword | `ModelSpec(model_id=...)` 필드 |
 | 타입당 provider 하나 | ✅ | ✅ | ✅ |
-| **같은 타입에 여러 키** (예: rate-limit 위해 `anthropic-1` + `anthropic-2`) | ❌ — dict key unique | ✅ — `add_anthropic(...)` 두 번, 다른 `env_var=` / `id=` | ✅ — 같은 `type`, 다른 `id` |
+| **같은 타입에 여러 키** (예: rate-limit 위해 `anthropic-1` + `anthropic-2`) | ❌ — dict key unique | ✅ — `add_provider(type="anthropic", ...)` 두 번, 다른 `api_key=` / `id=` | ✅ — 같은 `type`, 다른 `id` |
 | **Multi-region** (Bedrock east + west) | ❌ — `AWS_REGION` env 단일 | ✅ — `add_bedrock(...)` 별 명시 `region=` | ✅ — spec 별 명시 `region` |
 | **같은 타입에 다른 model_id** | ❌ — dict key unique | ✅ — call 별 다른 `model=` | ✅ — spec 별 다른 `model.model_id` |
 | **spec 별 `priority` 순서** | ❌ — 모두 default `0` | ✅ — `priority=` keyword | ✅ — primary→fallback 순서 명시 |
-| API_KEY 누락 동작 | silent skip → 그 provider 만 빠지고 나머지로 build | **fail-fast** — `KeyError` 와 정확한 env var 이름 | n/a (사용자 명시 제공) |
-| Verbosity (3 provider, 대략 줄 수) | 3줄 (dict 하나) | 5줄 (chained call 하나) | 15줄 (`ProviderSpec(...)` 하나씩) |
-| Mental model | 12-factor / env-driven | fluent + env-driven, fail-fast | code-as-config |
-| **언제 쓰나** | Dev, 타입당 single-vendor production, env-driven 배포 | **대부분 production — multi-key / multi-region / cross-vendor + env-friendly default** | 다른 곳 (config loader, orchestrator) 에서 `ProviderSpec` 인스턴스를 이미 만들고 있을 때 |
+| API_KEY 누락 동작 | silent skip → 그 provider 만 빠지고 나머지로 build | 호출자에 따라 다름 — `os.environ["..."]` 면 `KeyError`, vault lib 면 그쪽 에러 | n/a (사용자 명시 제공) |
+| Verbosity (3 provider, 대략 줄 수) | 3줄 (dict 하나) | ~12줄 (chained call 하나, provider 마다 명시 api_key) | 15줄 (`ProviderSpec(...)` 하나씩) |
+| Mental model | 12-factor / env-driven | fluent, credentials-as-values | code-as-config |
+| **언제 쓰나** | Dev, 타입당 single-vendor production, env-driven 배포 | **대부분 production — multi-key / multi-region / cross-vendor, credential 은 env / vault / secrets manager 어디서든** | 다른 곳 (config loader, orchestrator) 에서 `ProviderSpec` 인스턴스를 이미 만들고 있을 때 |
 
 ### 빠른 결정 흐름
 
 - "그냥 env 에서 Claude 1개 + OpenAI 1개, 가장 단순하게" → `from_env`. 끝.
-- **"multi-key / multi-region / cross-vendor / 명시 priority — env-friendly 하면서"** → **`RobustChain.builder()`** (대부분 production 권장). [`examples/builder.py`](examples/builder.py) 참조.
+- **"multi-key / multi-region / cross-vendor / 명시 priority"** → **`RobustChain.builder()`** (대부분 production 권장). [`examples/builder.py`](examples/builder.py) 참조.
 - "다른 코드에서 `ProviderSpec` 인스턴스를 이미 만들고 있어 (config loader, orchestrator)" → 명시 `providers=[ProviderSpec(...)]` list. 아래 [Advanced usage](#advanced-usage) 섹션의 inline 코드 참조.
 
-> **Builder 와 `from_env` silent-skip 비교:** builder 는 credential 누락 시 정확한 env var 이름 포함한 `KeyError` 즉시 raise. `from_env` 처럼 silent 로 provider 를 떨어뜨리지 않는다. 12-factor 편의를 명확성으로 교환 — dev 단계 지나면 보통 원하는 동작.
+> **Builder 와 `from_env` silent-skip 비교:** builder 는 credential 을 **값** 으로 받으므로 source 가 호출 site 에 명시적으로 드러난다. env 에서 (`os.environ["X"]`) 읽는데 var 가 없으면 정확한 이름과 함께 `KeyError`, secrets manager 면 그쪽 라이브러리 에러가 그대로 노출된다. 어느 쪽이든 silent skip 은 없다.
 
 ### `from_env` 가 인식하는 환경 변수
 

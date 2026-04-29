@@ -3,7 +3,12 @@
 The builder is the third path for configuring providers (alongside
 ``RobustChain.from_env`` and explicit ``RobustChain(providers=[...])``). It
 collapses the dict/list semantic split — every pattern (single, multi-key,
-multi-region, mixed, explicit-api-key) is the same chained method shape.
+multi-region, mixed) is the same chained method shape.
+
+Builder API (v0.3.0+): ``add_provider(type=..., api_key=...)`` for single-key
+providers + ``add_bedrock(...)`` for the asymmetric Bedrock case. Credentials
+are passed as values; reading them from env / Secrets Manager is the caller's
+job — the builder does not touch ``os.environ``.
 """
 
 import pytest
@@ -17,26 +22,44 @@ from robust_llm_chain.errors import NoProvidersConfigured
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def test_builder_single_anthropic_from_env(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-1234567890")
-    chain = RobustChain.builder().add_anthropic(model="claude-haiku-4-5-20251001").build()
+def test_builder_single_anthropic() -> None:
+    chain = (
+        RobustChain.builder()
+        .add_provider(
+            type="anthropic",
+            model="claude-haiku-4-5-20251001",
+            api_key="sk-ant-test-1234567890",
+        )
+        .build()
+    )
     assert len(chain._providers) == 1
     assert chain._providers[0].type == "anthropic"
     assert chain._providers[0].api_key == "sk-ant-test-1234567890"
     assert chain._providers[0].model.model_id == "claude-haiku-4-5-20251001"
 
 
-def test_builder_explicit_api_key_overrides_env(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "from-env-should-NOT-be-used")
-    chain = RobustChain.builder().add_anthropic(model="m", api_key="sk-explicit-1234567890").build()
-    assert chain._providers[0].api_key == "sk-explicit-1234567890"
+def test_builder_single_openai() -> None:
+    chain = (
+        RobustChain.builder()
+        .add_provider(type="openai", model="gpt-4o-mini", api_key="sk-openai-test")
+        .build()
+    )
+    assert chain._providers[0].type == "openai"
+    assert chain._providers[0].api_key == "sk-openai-test"
 
 
-def test_builder_explicit_api_key_no_env_required(monkeypatch):
-    """When api_key is explicit, env var lookup is skipped entirely."""
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    chain = RobustChain.builder().add_anthropic(model="m", api_key="sk-explicit-only").build()
-    assert chain._providers[0].api_key == "sk-explicit-only"
+def test_builder_single_openrouter() -> None:
+    chain = (
+        RobustChain.builder()
+        .add_provider(
+            type="openrouter",
+            model="anthropic/claude-haiku-4.5",
+            api_key="sk-or-test",
+        )
+        .build()
+    )
+    assert chain._providers[0].type == "openrouter"
+    assert chain._providers[0].api_key == "sk-or-test"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -44,16 +67,20 @@ def test_builder_explicit_api_key_no_env_required(monkeypatch):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def test_builder_multi_key_anthropic(monkeypatch):
-    """Two Anthropic keys — distinct env vars, distinct IDs, same type."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-primary-1")
-    monkeypatch.setenv("ANTHROPIC_API_KEY_BACKUP", "sk-ant-backup-2")
+def test_builder_multi_key_anthropic() -> None:
+    """Two Anthropic keys — distinct values, distinct IDs, same type."""
     chain = (
         RobustChain.builder()
-        .add_anthropic(model="claude-haiku-4-5-20251001", id="anthropic1")
-        .add_anthropic(
+        .add_provider(
+            type="anthropic",
             model="claude-haiku-4-5-20251001",
-            env_var="ANTHROPIC_API_KEY_BACKUP",
+            api_key="sk-ant-primary-1",
+            id="anthropic1",
+        )
+        .add_provider(
+            type="anthropic",
+            model="claude-haiku-4-5-20251001",
+            api_key="sk-ant-backup-2",
             id="anthropic2",
         )
         .build()
@@ -65,20 +92,22 @@ def test_builder_multi_key_anthropic(monkeypatch):
     assert chain._providers[1].api_key == "sk-ant-backup-2"
 
 
-def test_builder_bedrock_multi_region(monkeypatch):
+def test_builder_bedrock_multi_region() -> None:
     """Bedrock east + west — same AWS keys, different region."""
-    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIA-test")
-    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret-test-do-not-leak")
     chain = (
         RobustChain.builder()
         .add_bedrock(
             model="anthropic.claude-haiku-4-5",
             region="us-east-1",
+            aws_access_key_id="AKIA-test",
+            aws_secret_access_key="secret-test-do-not-leak",
             id="bedrock-east",
         )
         .add_bedrock(
             model="anthropic.claude-haiku-4-5",
             region="us-west-2",
+            aws_access_key_id="AKIA-test",
+            aws_secret_access_key="secret-test-do-not-leak",
             id="bedrock-west",
         )
         .build()
@@ -90,18 +119,38 @@ def test_builder_bedrock_multi_region(monkeypatch):
     assert chain._providers[1].id == "bedrock-west"
 
 
+def test_builder_bedrock_per_region_credentials() -> None:
+    """Bedrock with distinct credentials per region (blast-radius isolation)."""
+    chain = (
+        RobustChain.builder()
+        .add_bedrock(
+            model="anthropic.claude-haiku-4-5",
+            region="us-east-1",
+            aws_access_key_id="AKIA-east",
+            aws_secret_access_key="secret-east",
+        )
+        .add_bedrock(
+            model="anthropic.claude-haiku-4-5",
+            region="us-west-2",
+            aws_access_key_id="AKIA-west",
+            aws_secret_access_key="secret-west",
+        )
+        .build()
+    )
+    assert chain._providers[0].aws_access_key_id == "AKIA-east"
+    assert chain._providers[1].aws_access_key_id == "AKIA-west"
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Mixed vendors
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def test_builder_mixed_anthropic_openrouter(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-1")
-    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-2")
+def test_builder_mixed_anthropic_openrouter() -> None:
     chain = (
         RobustChain.builder()
-        .add_anthropic(model="claude-haiku-4-5-20251001")
-        .add_openrouter(model="anthropic/claude-haiku-4.5")
+        .add_provider(type="anthropic", model="claude-haiku-4-5-20251001", api_key="sk-ant-1")
+        .add_provider(type="openrouter", model="anthropic/claude-haiku-4.5", api_key="sk-or-2")
         .build()
     )
     assert len(chain._providers) == 2
@@ -109,17 +158,29 @@ def test_builder_mixed_anthropic_openrouter(monkeypatch):
     assert chain._providers[1].type == "openrouter"
 
 
-def test_builder_three_way_claude(monkeypatch):
+def test_builder_three_way_claude() -> None:
     """3-way Claude across Anthropic + Bedrock + OpenRouter — README pattern."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-1")
-    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-2")
-    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIA-3")
-    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret-3")
     chain = (
         RobustChain.builder()
-        .add_anthropic(model="claude-haiku-4-5-20251001", priority=0)
-        .add_bedrock(model="anthropic.claude-haiku-4-5", region="us-east-1", priority=1)
-        .add_openrouter(model="anthropic/claude-haiku-4.5", priority=2)
+        .add_provider(
+            type="anthropic",
+            model="claude-haiku-4-5-20251001",
+            api_key="sk-ant-1",
+            priority=0,
+        )
+        .add_bedrock(
+            model="anthropic.claude-haiku-4-5",
+            region="us-east-1",
+            aws_access_key_id="AKIA-3",
+            aws_secret_access_key="secret-3",
+            priority=1,
+        )
+        .add_provider(
+            type="openrouter",
+            model="anthropic/claude-haiku-4.5",
+            api_key="sk-or-2",
+            priority=2,
+        )
         .build()
     )
     assert len(chain._providers) == 3
@@ -132,13 +193,12 @@ def test_builder_three_way_claude(monkeypatch):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def test_builder_default_id_auto_unique(monkeypatch):
-    """Two Anthropic adds without explicit ``id`` get distinct auto-generated ids."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-1")
+def test_builder_default_id_auto_unique() -> None:
+    """Two anthropic adds without explicit ``id`` get distinct auto-generated ids."""
     chain = (
         RobustChain.builder()
-        .add_anthropic(model="m", api_key="k1")
-        .add_anthropic(model="m", api_key="k2")
+        .add_provider(type="anthropic", model="m", api_key="k1")
+        .add_provider(type="anthropic", model="m", api_key="k2")
         .build()
     )
     ids = [p.id for p in chain._providers]
@@ -146,25 +206,40 @@ def test_builder_default_id_auto_unique(monkeypatch):
     assert all(i.startswith("anthropic") for i in ids)
 
 
-def test_builder_priority_passthrough(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-1")
-    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-2")
+def test_builder_default_id_per_type() -> None:
+    """Auto-id counter is per type — bedrock-1 + anthropic-1 coexist."""
     chain = (
         RobustChain.builder()
-        .add_anthropic(model="m", priority=0)
-        .add_openrouter(model="m", priority=1)
+        .add_provider(type="anthropic", model="m", api_key="k1")
+        .add_bedrock(
+            model="m",
+            region="us-east-1",
+            aws_access_key_id="AKIA-x",
+            aws_secret_access_key="sec-x",
+        )
+        .build()
+    )
+    ids = {p.id for p in chain._providers}
+    assert ids == {"anthropic-1", "bedrock-1"}
+
+
+def test_builder_priority_passthrough() -> None:
+    chain = (
+        RobustChain.builder()
+        .add_provider(type="anthropic", model="m", api_key="sk-1", priority=0)
+        .add_provider(type="openrouter", model="m", api_key="sk-2", priority=1)
         .build()
     )
     assert chain._providers[0].priority == 0
     assert chain._providers[1].priority == 1
 
 
-def test_builder_build_passes_kwargs_to_chain():
+def test_builder_build_passes_kwargs_to_chain() -> None:
     """``.build(backend=..., temperature=...)`` forwards to ``RobustChain.__init__``."""
     backend = LocalBackend()
     chain = (
         RobustChain.builder()
-        .add_anthropic(model="m", api_key="k1")
+        .add_provider(type="anthropic", model="m", api_key="k1")
         .build(backend=backend, temperature=0.5)
     )
     assert chain._backend is backend
@@ -176,25 +251,7 @@ def test_builder_build_passes_kwargs_to_chain():
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def test_builder_empty_raises_no_providers():
+def test_builder_empty_raises_no_providers() -> None:
     """``builder().build()`` with no providers added → ``NoProvidersConfigured``."""
     with pytest.raises(NoProvidersConfigured):
         RobustChain.builder().build()
-
-
-def test_builder_missing_env_var_raises(monkeypatch):
-    """``add_anthropic(model="m")`` with default env var unset → clear error."""
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    with pytest.raises(KeyError) as excinfo:
-        RobustChain.builder().add_anthropic(model="m").build()
-    assert "ANTHROPIC_API_KEY" in str(excinfo.value)
-
-
-def test_builder_missing_aws_env_raises(monkeypatch):
-    """Bedrock without AWS env vars → clear error mentioning the missing var."""
-    monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
-    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
-    with pytest.raises(KeyError) as excinfo:
-        RobustChain.builder().add_bedrock(model="m", region="us-east-1").build()
-    msg = str(excinfo.value)
-    assert "AWS_ACCESS_KEY_ID" in msg or "AWS_SECRET_ACCESS_KEY" in msg

@@ -4,19 +4,20 @@ Run with:
     uv run python examples/quickstart.py
 
 Requires both ``ANTHROPIC_API_KEY`` and ``OPENROUTER_API_KEY`` in the
-environment. Missing either → ``KeyError`` from the builder with the exact
-env var name (fail-fast).
+environment. The example reads them via ``os.environ[...]`` — missing →
+``KeyError`` with the var name (Python's standard fail-fast).
 
 Why ``RobustChain.builder()``? It's the most concise way to express the
-common pattern (multiple providers via env defaults) without the dict /
-vendor-prefix collision that ``from_env(model_ids={...})`` can show, and
-without the verbosity of constructing ``ProviderSpec`` instances by hand.
-For multi-key / multi-region / cross-vendor patterns, see
-``examples/builder.py``. For the explicit ``providers=[ProviderSpec(...)]``
-path, see the inline code blocks in the README "Advanced usage" section.
+common pattern (multiple providers) without the dict / vendor-prefix
+collision that ``from_env(model_ids={...})`` can show, and without the
+verbosity of constructing ``ProviderSpec`` instances by hand. For multi-key
+/ multi-region / cross-vendor patterns, see ``examples/builder.py``. For
+the explicit ``providers=[ProviderSpec(...)]`` path, see the inline code
+blocks in the README "Advanced usage" section.
 """
 
 import asyncio
+import os
 import sys
 
 from robust_llm_chain import RobustChain
@@ -26,8 +27,18 @@ from robust_llm_chain.errors import NoProvidersConfigured
 def main() -> None:
     chain = (
         RobustChain.builder()
-        .add_anthropic(model="claude-haiku-4-5-20251001", priority=0)
-        .add_openrouter(model="anthropic/claude-haiku-4.5", priority=1)
+        .add_provider(
+            type="anthropic",
+            model="claude-haiku-4-5-20251001",
+            api_key=os.environ["ANTHROPIC_API_KEY"],
+            priority=0,
+        )
+        .add_provider(
+            type="openrouter",
+            model="anthropic/claude-haiku-4.5",
+            api_key=os.environ["OPENROUTER_API_KEY"],
+            priority=1,
+        )
         .build()
     )
     # acall: convenience method that returns a ChainResult with operational metadata
