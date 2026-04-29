@@ -354,23 +354,25 @@ chain = RobustChain(
 )
 ```
 
-### Multiple keys per vendor (primary + backup)
+### Multiple keys per vendor
 ```python
 import os
 from robust_llm_chain import RobustChain, ProviderSpec, ModelSpec
 
 # Two Anthropic API keys — round-robin between them, fall over if one rate-limits.
+# Same shape works for any single-key provider (OPENAI_API_KEY_1 / _2, etc.).
+# Naming is your call (_1/_2, _PRIMARY/_BACKUP, _TEAM_A/_TEAM_B, …).
 chain = RobustChain(providers=[
     ProviderSpec(
-        id="anthropic-primary",
+        id="anthropic-1",
         type="anthropic",
-        api_key=os.environ["ANTHROPIC_API_KEY"],
+        api_key=os.environ["ANTHROPIC_API_KEY_1"],
         model=ModelSpec(model_id="claude-haiku-4-5-20251001"),
     ),
     ProviderSpec(
-        id="anthropic-backup",
+        id="anthropic-2",
         type="anthropic",
-        api_key=os.environ["ANTHROPIC_API_KEY_BACKUP"],
+        api_key=os.environ["ANTHROPIC_API_KEY_2"],
         model=ModelSpec(model_id="claude-haiku-4-5-20251001"),
     ),
 ])

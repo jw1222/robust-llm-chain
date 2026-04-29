@@ -354,23 +354,25 @@ chain = RobustChain(
 )
 ```
 
-### Vendor 당 다중 key (primary + backup)
+### Vendor 당 다중 key
 ```python
 import os
 from robust_llm_chain import RobustChain, ProviderSpec, ModelSpec
 
 # Anthropic API key 두 개 — 둘 사이를 라운드 로빈, 한쪽이 rate-limit 에 걸리면 폴백.
+# 동일 패턴이 모든 single-key provider 에 적용됩니다 (OPENAI_API_KEY_1 / _2 등).
+# 네이밍은 자유 (_1/_2, _PRIMARY/_BACKUP, _TEAM_A/_TEAM_B …).
 chain = RobustChain(providers=[
     ProviderSpec(
-        id="anthropic-primary",
+        id="anthropic-1",
         type="anthropic",
-        api_key=os.environ["ANTHROPIC_API_KEY"],
+        api_key=os.environ["ANTHROPIC_API_KEY_1"],
         model=ModelSpec(model_id="claude-haiku-4-5-20251001"),
     ),
     ProviderSpec(
-        id="anthropic-backup",
+        id="anthropic-2",
         type="anthropic",
-        api_key=os.environ["ANTHROPIC_API_KEY_BACKUP"],
+        api_key=os.environ["ANTHROPIC_API_KEY_2"],
         model=ModelSpec(model_id="claude-haiku-4-5-20251001"),
     ),
 ])

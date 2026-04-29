@@ -8,11 +8,10 @@ pattern uses the same chained method shape:
 
     chain = (
         RobustChain.builder()
-        .add_anthropic(model="claude-haiku-4-5-20251001")
+        .add_anthropic(model="claude-haiku-4-5-20251001", env_var="ANTHROPIC_API_KEY_1")
         .add_anthropic(
             model="claude-haiku-4-5-20251001",
-            env_var="ANTHROPIC_API_KEY_BACKUP",
-            id="anthropic2",
+            env_var="ANTHROPIC_API_KEY_2",
         )
         .add_bedrock(model="anthropic.claude-haiku-4-5", region="us-east-1")
         .build()

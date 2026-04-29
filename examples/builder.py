@@ -51,16 +51,32 @@ def _content_to_str(content: object) -> str:
 def multikey() -> None:
     """Two Anthropic keys for double the rate limit.
 
-    Required env: ``ANTHROPIC_API_KEY``, ``ANTHROPIC_API_KEY_BACKUP``
+    The pattern is **provider-agnostic** — the same shape works for every
+    single-key provider by swapping the method and env var prefix:
+
+    - Anthropic: ``ANTHROPIC_API_KEY_1`` / ``ANTHROPIC_API_KEY_2`` via ``add_anthropic``
+    - OpenAI:    ``OPENAI_API_KEY_1`` / ``OPENAI_API_KEY_2`` via ``add_openai``
+    - OpenRouter:``OPENROUTER_API_KEY_1`` / ``OPENROUTER_API_KEY_2`` via ``add_openrouter``
+    - Bedrock:   per-region credential pairs (see ``multiregion`` below)
+
+    Naming convention is your call (``_1``/``_2``, ``_PRIMARY``/``_BACKUP``,
+    ``_TEAM_A``/``_TEAM_B`` — whatever your secret store uses); the builder
+    only cares about the env var name you point it at via ``env_var=``.
+
+    Required env: ``ANTHROPIC_API_KEY_1``, ``ANTHROPIC_API_KEY_2``
     """
-    _require(["ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY_BACKUP"])
+    _require(["ANTHROPIC_API_KEY_1", "ANTHROPIC_API_KEY_2"])
 
     chain = (
         RobustChain.builder()
-        .add_anthropic(model="claude-haiku-4-5-20251001", id="anthropic-1")
         .add_anthropic(
             model="claude-haiku-4-5-20251001",
-            env_var="ANTHROPIC_API_KEY_BACKUP",
+            env_var="ANTHROPIC_API_KEY_1",
+            id="anthropic-1",
+        )
+        .add_anthropic(
+            model="claude-haiku-4-5-20251001",
+            env_var="ANTHROPIC_API_KEY_2",
             id="anthropic-2",
         )
         .build()
@@ -146,10 +162,10 @@ def multiregion() -> None:
     commented-out variant below. The variant points the builder at *different*
     env var names (``AWS_ACCESS_KEY_ID_EAST`` / ``AWS_SECRET_ACCESS_KEY_EAST``
     / ``AWS_ACCESS_KEY_ID_WEST`` / ``AWS_SECRET_ACCESS_KEY_WEST``); those env
-    vars must be exported beforehand. Pick any naming convention you like —
-    ``_1``/``_2``, ``_PRIMARY``/``_BACKUP``, etc. all work. To avoid env vars
-    entirely, pass ``aws_access_key_id=`` / ``aws_secret_access_key=`` and
-    source the value from a secrets manager.
+    vars must be exported beforehand. Same naming-convention freedom as
+    ``multikey`` above (``_1``/``_2``, ``_PRIMARY``/``_BACKUP``, etc.). To
+    avoid env vars entirely, pass ``aws_access_key_id=`` /
+    ``aws_secret_access_key=`` and source the value from a secrets manager.
 
     Required env: ``AWS_ACCESS_KEY_ID``, ``AWS_SECRET_ACCESS_KEY``
     """
