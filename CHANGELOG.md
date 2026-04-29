@@ -26,6 +26,9 @@
 - **`ARCHITECTURE.md §4` Credential masking 갱신**: layer #5 (`compare=False`) + layer #6 (`__getstate__` / `__setstate__`) 추가, "every channel" → "most channels" + asdict 미보장 명시 + `SECURITY.md §1` cross-ref.
 - **`pyproject.toml` sdist include 보강**: `SECURITY.md` / `CONTRIBUTING.md` / `CODE_OF_CONDUCT.md` 추가 — sdist-only 사용자도 보안 보장표 / TDD 룰 / CoC 접근 가능 (Round 3 종합 리뷰 + CSO 합의 발견).
 - **`_security.py` docstring**: `_KEY_PATTERNS` 가 best-effort 임을 코드 reader 가 즉시 인지하도록 한 줄 명시 + `SECURITY.md §2` cross-ref.
+- **`observability/langsmith.py` 의 `cleanup_run` credential 누출 차단**: provider SDK 가 401/403 응답에서 api_key 를 echo back 하는 경우 raw error 가 LangSmith dashboard 의 `run.error` 필드에 그대로 노출되던 경로 차단. `_update_run` 이 `sanitize_message(str(error))` 거치도록 수정 (기존 `str(error)` 직접 전달). RED→GREEN 회귀 테스트 추가 (`test_cleanup_run_sanitizes_credential_in_error_before_sending`). Codex Round 4 발견.
+- **`SECURITY.md §1` 의 `repr(result)` 권장 정정**: 이전 문구가 "use `repr(spec)` / `repr(result)`" 였으나 `ChainResult` 는 default dataclass repr 라 `input` (prompt) / `output` (response) 평문 노출 — hardening #3 ("library never logs prompt/response") 와 모순. `repr(spec)` 만 안전하다는 명확화 + 사용자가 ChainResult 를 직렬화할 때 명시적 필드 추출 (provider id / elapsed_ms / usage / attempts) 권장으로 수정. Codex Round 4 발견.
+- **`pyproject.toml` sdist `.gitignore` 제외 시도 (v0.2 미룸)**: hatchling 기본 동작이 sdist 에 `.gitignore` 를 자동 포함하며 표준 `exclude` 옵션으로 차단되지 않음 (Round 4 검증). `.gitignore` 가 노출하는 정보는 일반 glob + 사적 파일명 1개 (`docs/start/PRIVATE_NOTES.md`) 로 minor information leak. v0.2 에서 `force-exclude` 또는 hatch plugin 으로 처리. pyproject.toml 에 NOTE 주석 추가. Codex Round 4 발견 L3.
 
 ### Documentation
 - **`ARCHITECTURE.md` 를 project root 로 승격** — 외부 contributor 친화적. 모듈 구조 / 의존 그래프 / 호출 lifecycle / 데이터 모델 / 에러 흐름 / public surface / 확장점 (custom ProviderAdapter / IndexBackend / fail-closed semantics) 정리. README 의 새 "Architecture" 섹션에서 링크. `pyproject.toml [tool.hatch.build.targets.sdist]` 에 포함되어 PyPI sdist 와 함께 배포.

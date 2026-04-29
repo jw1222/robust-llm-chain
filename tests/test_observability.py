@@ -89,6 +89,29 @@ def test_update_run_with_no_error_passes_none(monkeypatch):
     assert captured[0]["error"] is None
 
 
+def test_cleanup_run_sanitizes_credential_in_error_before_sending(monkeypatch):
+    """Raw error text containing credential patterns must be sanitized.
+
+    Hardening: prevents provider SDK error messages (which sometimes echo the
+    api_key back in 401/403 responses) from leaking to LangSmith via the
+    cleanup_run path. ``sanitize_message`` masks known prefixes; without this,
+    a ``LANGCHAIN_TRACING_V2=true`` user would see credentials show up in the
+    LangSmith dashboard's run.error field.
+    """
+    monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_pt_test")
+    captured: list[dict] = []
+    _install_fake_langsmith(monkeypatch, captured)
+
+    leak_marker = "sk-ant-api03-leak-canary-do-not-send-1234567890"
+    error = RuntimeError(f"401 Unauthorized: invalid api key '{leak_marker}'")
+    asyncio.run(ls.cleanup_run("run-id", error))
+
+    assert len(captured) == 1
+    sent = str(captured[0]["error"])
+    assert leak_marker not in sent, "raw credential leaked to LangSmith via cleanup_run"
+    assert "***" in sent, "sanitize_message must mask credential patterns"
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Backpressure — Semaphore(50) drops new work when locked
 # ──────────────────────────────────────────────────────────────────────────────

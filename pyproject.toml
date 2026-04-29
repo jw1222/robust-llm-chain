@@ -71,6 +71,11 @@ include = [
     "CHANGELOG.md",
     "pyproject.toml",
 ]
+# NOTE (v0.2 후속): hatchling 의 sdist 가 `.gitignore` 를 root files 에서
+# 자동 포함하며 표준 `exclude` 옵션으로 차단되지 않음. `.gitignore` 가 노출
+# 하는 정보는 일반 패턴 + 한 개 사적 파일명 (`docs/start/PRIVATE_NOTES.md`)
+# 으로 minor information leak. v0.2 에서 `force-exclude` 또는 hatch_build.py
+# plugin 으로 처리 (Codex Round 4 발견 L3).
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Ruff — lint + format

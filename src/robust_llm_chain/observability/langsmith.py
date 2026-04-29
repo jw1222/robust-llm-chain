@@ -89,11 +89,18 @@ def _maybe_log_drop() -> None:
 
 
 async def _update_run(run_id: str, error: BaseException | None) -> None:
-    """Invoke ``Client.update_run`` on the threadpool (blocking SDK call)."""
+    """Invoke ``Client.update_run`` on the threadpool (blocking SDK call).
+
+    Provider SDK errors sometimes echo the api_key back in their message
+    (401/403 responses). ``sanitize_message`` masks known credential prefixes
+    before the text reaches LangSmith — see ``SECURITY.md`` hardening #2.
+    """
     from langsmith import Client
 
+    from robust_llm_chain._security import sanitize_message
+
     client = Client()
-    error_text = str(error) if error is not None else None
+    error_text = sanitize_message(str(error)) if error is not None else None
     await asyncio.to_thread(
         client.update_run,
         run_id,
