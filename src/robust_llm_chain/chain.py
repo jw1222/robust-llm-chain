@@ -1,10 +1,11 @@
 """``RobustChain`` — public orchestrator with Hybrid API.
 
 Implements LangChain ``Runnable`` (``ainvoke`` / ``astream``) plus a
-convenience ``acall`` that returns ``ChainResult`` directly. Round-robin
-across configured providers via ``ProviderResolver`` + ``IndexBackend``;
-streaming details (first-token timeout, bounded cleanup) live in
-``StreamExecutor``.
+convenience ``acall`` that returns ``ChainResult`` directly. Failover
+rotates across configured providers via ``ProviderResolver`` +
+``IndexBackend`` (one backend tick per call picks the start; rotation
+is priority-sorted with each provider tried at most once); streaming
+details (first-token timeout, bounded cleanup) live in ``StreamExecutor``.
 """
 
 import asyncio
