@@ -7,6 +7,9 @@
 ### Added (post-v0.1.0 GitHub release)
 - **`examples/advanced.py`** — runnable scripts for 4 production patterns: `multikey` (두 Anthropic 키 round-robin), `3way` (Anthropic + Bedrock + OpenRouter 3-way Claude failover), `xvendor` (Claude → GPT cross-vendor cross-model), `multiregion` (Bedrock east + west). README "Advanced usage" 섹션이 이제 코드 + 실행 가능한 example 모두 가리킴. v0.1.0 GitHub release 후 사용자 질문 ("multi-key 샘플은?" + "model id 는 사용자가 넣는가?" → yes, 의도된 디자인) 반영.
 
+### Changed (post-v0.1.0 GitHub release)
+- **`examples/quickstart.py` + README "Quickstart" — 명시 ProviderSpec list 로 변경**: 이전 `from_env(model_ids={"anthropic": "...", "openrouter": "anthropic/..."})` 패턴이 dict key (provider type) 와 value 안 vendor prefix (`anthropic/...`) 모두 "anthropic" 등장으로 학습 곡선 헷갈림 발생 (사용자 catch). 명시 `ProviderSpec(id="anthropic-direct", type="anthropic", model=ModelSpec(model_id="..."), api_key=..., priority=0)` 로 변경 — `id` (사용자 label) / `type` (어댑터) / `model.model_id` (vendor 식별자) 가 분리되어 각 역할 명확. `examples/advanced.py` 와 학습 곡선 일관. `from_env()` 는 README 의 별도 "Shortcut" callout 으로 분리 (의도/한계 명시). README 30-second → "Quickstart" 로 제목 변경 (verbose 해진 만큼 약속도 정직하게).
+
 
 ### v0.2 backlog (Codex / quality round 누적 권고, 모두 의도된 미룸)
 - `to_safe_dict()` helper — `asdict(ChainResult)` footgun 의 안전한 직렬화 경로 (Codex R2/R3/R4 강조).

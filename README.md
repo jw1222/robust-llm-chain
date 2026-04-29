@@ -35,7 +35,7 @@ These two timeouts are the core differentiator: most libraries only have a singl
 
 ---
 
-## 30-second Quickstart
+## Quickstart
 
 Install:
 ```bash
@@ -46,28 +46,41 @@ Set two environment variables (`ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`), then:
 
 ```python
 import asyncio
-from robust_llm_chain import RobustChain
+import os
+from robust_llm_chain import RobustChain, ProviderSpec, ModelSpec
 
-# provider type → that provider's model_id
-chain = RobustChain.from_env(model_ids={
-    "anthropic":  "claude-haiku-4-5-20251001",
-    "openrouter": "anthropic/claude-haiku-4.5",
-})
+chain = RobustChain(providers=[
+    ProviderSpec(
+        id="anthropic-direct",                                    # your label
+        type="anthropic",                                         # adapter
+        model=ModelSpec(model_id="claude-haiku-4-5-20251001"),    # vendor's model id
+        api_key=os.environ["ANTHROPIC_API_KEY"],
+        priority=0,                                               # primary
+    ),
+    ProviderSpec(
+        id="openrouter-claude",
+        type="openrouter",
+        model=ModelSpec(model_id="anthropic/claude-haiku-4.5"),
+        api_key=os.environ["OPENROUTER_API_KEY"],
+        priority=1,                                               # fallback
+    ),
+])
 # acall: convenience method that returns a ChainResult with operational metadata
 result = asyncio.run(chain.acall("두 줄로 자기소개 해줘."))
-print(result.output.content)                     # BaseMessage.content
-print(result.provider_used.id, result.usage)     # metadata
+print(result.output.content)                                # BaseMessage.content
+print(f"used: {result.provider_used.id} | tokens: {result.usage}")  # metadata
 ```
 
 > The standard Runnable `ainvoke()` returns just a `BaseMessage` (for LangChain composition). To get `attempts`, `cost`, and `usage` in one call, use `acall()` or read `chain.last_result`.
 
 **What happens:**
-- `from_env()` scans the standard env vars for v0.1-active providers (`ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`).
-- A provider is enabled if both its env var **and** an entry in `model_ids` are present. Missing either → that provider is silently skipped.
-- Zero active providers → `NoProvidersConfigured` raised immediately.
-- If Anthropic returns 529, the request transparently fails over to OpenRouter. No additional configuration.
+- Two providers configured: Anthropic Direct (primary, `priority=0`) and OpenRouter as fallback (`priority=1`).
+- If Anthropic returns 529 / overloaded / pending, the request transparently fails over to OpenRouter. No additional configuration.
+- Distinct `id` (your label) and `model.model_id` (the vendor's identifier) so each role is unambiguous — even when OpenRouter's `vendor/model` format starts with `anthropic/...`.
 
-**Defaults:** single-worker / `pricing=None` / `backend=LocalBackend()`. For multi-worker round-robin, cost computation, or explicit `ProviderSpec` construction, see the [Advanced usage](#advanced-usage) section below.
+**Defaults:** single-worker / `pricing=None` / `backend=LocalBackend()`. For multi-worker round-robin, cost computation, or multi-key / multi-region patterns, see [Advanced usage](#advanced-usage) below.
+
+> **Shortcut for the simple "one provider per type" case:** `RobustChain.from_env(model_ids={"anthropic": "...", "openrouter": "..."})` auto-builds the same `ProviderSpec` list from env vars. Note the dict key is the **provider type** (adapter), and the value is the **vendor's model id** — these can look the same string when an OpenRouter model id starts with `anthropic/...`. Use the explicit form above when clarity matters.
 
 ---
 
