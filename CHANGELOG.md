@@ -4,20 +4,7 @@
 
 ## [Unreleased]
 
-### Added (post-v0.1.0 GitHub release)
-- **`RobustChain.builder()` — fluent provider configuration (third path)** — `RobustChain.builder().add_anthropic(model="...").add_openrouter(model="...").build()` 패턴. 두 기존 path (`from_env` dict-based / `providers=[...]` list-based) 의 capability split (multi-key / multi-region 표현) 을 동일 chained API 로 합치는 중간 layer. additive — 기존 path 모두 유지. credential resolution 은 `add_*` 별 default `env_var` (configurable) **또는** explicit `api_key=` (env 없어도 OK), 누락 시 `KeyError` fail-fast (silent skip 아님 — `from_env` 의 함정 반대). auto-id (`anthropic-1` / `anthropic-2`) 로 multi-key 자동 unique. `src/robust_llm_chain/builder.py` 신규 모듈, `RobustChain.builder()` classmethod, +13 RED→GREEN 단위 테스트. **사용자 dogfooding 발견 (두 path 헷갈림 → 즉시 구현)**. README "Quickstart" 도 builder 패턴으로 변경 (가장 간결). README "Provider configuration: three paths" 섹션 + decision tree 갱신.
-- **`examples/builder.py`** — runnable scripts for 4 production patterns via builder API (`multikey` / `3way` / `xvendor` / `multiregion`). `examples/advanced.py` (explicit ProviderSpec list) 와 동일 시나리오, builder 로 표현.
-- **`examples/quickstart.py` 갱신** — README quickstart 와 byte-identical: builder 패턴으로 변경 (이전: explicit ProviderSpec list).
-- **`examples/advanced.py`** — runnable scripts for 4 production patterns: `multikey` (두 Anthropic 키 round-robin), `3way` (Anthropic + Bedrock + OpenRouter 3-way Claude failover), `xvendor` (Claude → GPT cross-vendor cross-model), `multiregion` (Bedrock east + west). README "Advanced usage" 섹션이 이제 코드 + 실행 가능한 example 모두 가리킴. v0.1.0 GitHub release 후 사용자 질문 ("multi-key 샘플은?" + "model id 는 사용자가 넣는가?" → yes, 의도된 디자인) 반영.
-
-### Changed (post-v0.1.0 GitHub release)
-- **`examples/quickstart.py` + README "Quickstart" — 명시 ProviderSpec list 로 변경**: 이전 `from_env(model_ids={"anthropic": "...", "openrouter": "anthropic/..."})` 패턴이 dict key (provider type) 와 value 안 vendor prefix (`anthropic/...`) 모두 "anthropic" 등장으로 학습 곡선 헷갈림 발생 (사용자 catch). 명시 `ProviderSpec(id="anthropic-direct", type="anthropic", model=ModelSpec(model_id="..."), api_key=..., priority=0)` 로 변경 — `id` (사용자 label) / `type` (어댑터) / `model.model_id` (vendor 식별자) 가 분리되어 각 역할 명확. `examples/advanced.py` 와 학습 곡선 일관. `from_env()` 는 README 의 별도 "Shortcut" callout 으로 분리 (의도/한계 명시). README 30-second → "Quickstart" 로 제목 변경 (verbose 해진 만큼 약속도 정직하게).
-- **README "Anatomy of a result" + "Logging" 섹션 신설**: 사용자 catch ("어떤 정보가 output 으로 나오는지? log 는 어디에 기록되는지?"). `ChainResult` 8 필드 표 + happy path sample (single provider 성공 시 `output` / `usage` / `provider_used.id` / `attempts` 실제 값) + failover path sample (primary throttle 시 `attempts` 가 OverloadedError 와 fallback 모두 기록) + `chain.last_result` (contextvars-scoped) / `total_token_usage` / `total_cost` aggregate 명시. Logging 섹션은 logger 이름 (`robust_llm_chain.chain` / `robust_llm_chain.observability.langsmith`) + structured `extra` field (event / run_id / error_type 등) + "NOT logged by design" (prompt/response/credential 0 logging — SECURITY hardening #3). ARCHITECTURE.md §4 ChainResult 영역에 cross-ref 한 줄 추가.
-- **한국어 번역 5 파일 추가** (root): `README_KO.md` (458줄) / `ARCHITECTURE_KO.md` (477줄) / `CONTRIBUTING_KO.md` (162줄) / `SECURITY_KO.md` (87줄) / `CODE_OF_CONDUCT_KO.md` (107줄, Contributor Covenant v2.1 [공식 한국어 번역](https://www.contributor-covenant.org/ko/version/2/1/code_of_conduct/) 어휘 차용). 영어 원본이 정본 (translation header 명시), markdown 구조 / 표 / 코드블록 / 식별자 1:1 보존, 자연어 본문만 한국어 (격식 평어체 + 정착된 음역: 폴백/페일오버/스로틀/라운드 로빈/프로덕션). README 상단에 5개 한글 문서 링크 callout 추가. `pyproject.toml [tool.hatch.build.targets.sdist].include` 에 5개 추가 — sdist 사용자도 한글 문서 접근 가능. 사용자 요청 ("**_KO.md 한글파일이 있으면 좋겠어").
-
-
-### v0.2 backlog (Codex / quality round 누적 권고, 모두 의도된 미룸)
-- ~~**Fluent builder API**~~ → **v0.2.0 에서 구현 완료** (위 Added 섹션 참조).
+### Future backlog (post-v0.2.0 — Codex / quality round 누적 권고, 모두 의도된 미룸)
 - `to_safe_dict()` helper — `asdict(ChainResult)` footgun 의 안전한 직렬화 경로 (Codex R2/R3/R4 강조).
 - 명시적 `__copy__` / `__deepcopy__` — 현 `__getstate__` 동작 (credential drop) 으로 안전하나 SECURITY.md §1 명시만으로 충분.
 - `_KEY_PATTERNS` 에 LangSmith service token / AWS STS / 추가 prefix 보강 (현재 best-effort qualifier 명시).
@@ -30,6 +17,20 @@
 - mixed-currency 비용 누적 정책 — Codex Review R2 (현재 LHS currency 채택, orchestrator 가 single-currency 가정).
 - `ProviderModelCreationFailed` 정의 vs raise 미사용 cleanup — Codex Q4 (minor dead code).
 - `_V02_PLACEHOLDER_TYPES` 의 redis 분류 — backend concept 인데 provider type 으로 분류, v0.2 에서 backend extra 활성 시 재고.
+
+## [0.2.0] - 2026-04-29
+
+### Added
+- **`RobustChain.builder()` — fluent provider configuration (third path)** — `RobustChain.builder().add_anthropic(model="...").add_openrouter(model="...").build()` 패턴. 두 기존 path (`from_env` dict-based / `providers=[...]` list-based) 의 capability split (multi-key / multi-region 표현) 을 동일 chained API 로 합치는 중간 layer. additive — 기존 path 모두 유지. credential resolution 은 `add_*` 별 default `env_var` (configurable) **또는** explicit `api_key=` (env 없어도 OK), 누락 시 `KeyError` fail-fast (silent skip 아님 — `from_env` 의 함정 반대). auto-id (`anthropic-1` / `anthropic-2`) 로 multi-key 자동 unique. `src/robust_llm_chain/builder.py` 신규 모듈, `RobustChain.builder()` classmethod, +13 RED→GREEN 단위 테스트. **사용자 dogfooding 발견 (두 path 헷갈림 → 즉시 구현)**. README "Quickstart" 도 builder 패턴으로 변경 (가장 간결). README "Provider configuration: three paths" 섹션 + decision tree 갱신.
+- **`examples/builder.py`** — runnable scripts for 4 production patterns via builder API (`multikey` / `3way` / `xvendor` / `multiregion`). `examples/advanced.py` (explicit ProviderSpec list) 와 동일 시나리오, builder 로 표현.
+- **`examples/quickstart.py` 갱신** — README quickstart 와 byte-identical: builder 패턴으로 변경 (이전: explicit ProviderSpec list).
+- **`examples/advanced.py`** — runnable scripts for 4 production patterns: `multikey` (두 Anthropic 키 round-robin), `3way` (Anthropic + Bedrock + OpenRouter 3-way Claude failover), `xvendor` (Claude → GPT cross-vendor cross-model), `multiregion` (Bedrock east + west). README "Advanced usage" 섹션이 이제 코드 + 실행 가능한 example 모두 가리킴. v0.1.0 GitHub release 후 사용자 질문 ("multi-key 샘플은?" + "model id 는 사용자가 넣는가?" → yes, 의도된 디자인) 반영.
+
+### Changed
+- **`examples/quickstart.py` + README "Quickstart" — 명시 ProviderSpec list 로 변경**: 이전 `from_env(model_ids={"anthropic": "...", "openrouter": "anthropic/..."})` 패턴이 dict key (provider type) 와 value 안 vendor prefix (`anthropic/...`) 모두 "anthropic" 등장으로 학습 곡선 헷갈림 발생 (사용자 catch). 명시 `ProviderSpec(id="anthropic-direct", type="anthropic", model=ModelSpec(model_id="..."), api_key=..., priority=0)` 로 변경 — `id` (사용자 label) / `type` (어댑터) / `model.model_id` (vendor 식별자) 가 분리되어 각 역할 명확. `examples/advanced.py` 와 학습 곡선 일관. `from_env()` 는 README 의 별도 "Shortcut" callout 으로 분리 (의도/한계 명시). README 30-second → "Quickstart" 로 제목 변경 (verbose 해진 만큼 약속도 정직하게).
+- **README "Anatomy of a result" + "Logging" 섹션 신설**: 사용자 catch ("어떤 정보가 output 으로 나오는지? log 는 어디에 기록되는지?"). `ChainResult` 8 필드 표 + happy path sample (single provider 성공 시 `output` / `usage` / `provider_used.id` / `attempts` 실제 값) + failover path sample (primary throttle 시 `attempts` 가 OverloadedError 와 fallback 모두 기록) + `chain.last_result` (contextvars-scoped) / `total_token_usage` / `total_cost` aggregate 명시. Logging 섹션은 logger 이름 (`robust_llm_chain.chain` / `robust_llm_chain.observability.langsmith`) + structured `extra` field (event / run_id / error_type 등) + "NOT logged by design" (prompt/response/credential 0 logging — SECURITY hardening #3). ARCHITECTURE.md §4 ChainResult 영역에 cross-ref 한 줄 추가.
+- **한국어 번역 5 파일 추가** (root): `README_KO.md` (458줄) / `ARCHITECTURE_KO.md` (477줄) / `CONTRIBUTING_KO.md` (162줄) / `SECURITY_KO.md` (87줄) / `CODE_OF_CONDUCT_KO.md` (107줄, Contributor Covenant v2.1 [공식 한국어 번역](https://www.contributor-covenant.org/ko/version/2/1/code_of_conduct/) 어휘 차용). 영어 원본이 정본 (translation header 명시), markdown 구조 / 표 / 코드블록 / 식별자 1:1 보존, 자연어 본문만 한국어 (격식 평어체 + 정착된 음역: 폴백/페일오버/스로틀/라운드 로빈/프로덕션). README 상단에 5개 한글 문서 링크 callout 추가. `pyproject.toml [tool.hatch.build.targets.sdist].include` 에 5개 추가 — sdist 사용자도 한글 문서 접근 가능. 사용자 요청 ("**_KO.md 한글파일이 있으면 좋겠어").
+
 
 ## [0.1.0] - 2026-04-29
 
