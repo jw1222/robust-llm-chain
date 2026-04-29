@@ -998,7 +998,7 @@ wheels = [
 
 [[package]]
 name = "robust-llm-chain"
-version = "0.1.0a0"
+version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "langchain-core" },

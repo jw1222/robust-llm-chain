@@ -25,7 +25,7 @@ This project uses [uv](https://docs.astral.sh/uv/) exclusively. Do not introduce
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Clone + install (creates .venv automatically, full extras)
-git clone https://github.com/jwhan/robust-llm-chain.git
+git clone https://github.com/jw1222/robust-llm-chain.git
 cd robust-llm-chain
 uv sync --all-extras
 

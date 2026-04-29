@@ -19,7 +19,7 @@ Once `1.0` ships, the support window will be defined here.
 
 Use **GitHub Security Advisories** (private) instead:
 
-1. Go to <https://github.com/jwhan/robust-llm-chain/security/advisories/new>
+1. Go to <https://github.com/jw1222/robust-llm-chain/security/advisories/new>
 2. Describe the vulnerability with a minimum reproduction
 3. Wait for an acknowledgement (target: within 7 days)
 

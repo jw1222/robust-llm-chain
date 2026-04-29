@@ -46,7 +46,7 @@ Instances of abusive, harassing, or otherwise unacceptable behavior may be repor
 
 **Preferred channel — same as security reports:**
 
-1. Open a private report via [GitHub Security Advisories](https://github.com/jwhan/robust-llm-chain/security/advisories/new) — choose "Code of Conduct" as the category in the description.
+1. Open a private report via [GitHub Security Advisories](https://github.com/jw1222/robust-llm-chain/security/advisories/new) — choose "Code of Conduct" as the category in the description.
 2. If you cannot use Security Advisories, email the maintainer (address listed on the GitHub profile).
 
 **What to include**

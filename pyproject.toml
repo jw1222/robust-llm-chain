@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "robust-llm-chain"
-version = "0.1.0a0"
+version = "0.1.0"
 description = "Production-grade cross-vendor failover for LLM APIs"
 readme = "README.md"
 requires-python = ">=3.13"
 license = "MIT"
 authors = [
-    { name = "jwhan" },
+    { name = "jw1222" },
 ]
 keywords = ["llm", "anthropic", "openrouter", "langchain", "failover", "resilience"]
 classifiers = [
@@ -50,11 +50,11 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/jwhan/robust-llm-chain"
-Documentation = "https://github.com/jwhan/robust-llm-chain#readme"
-Repository = "https://github.com/jwhan/robust-llm-chain"
-Issues = "https://github.com/jwhan/robust-llm-chain/issues"
-Changelog = "https://github.com/jwhan/robust-llm-chain/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/jw1222/robust-llm-chain"
+Documentation = "https://github.com/jw1222/robust-llm-chain#readme"
+Repository = "https://github.com/jw1222/robust-llm-chain"
+Issues = "https://github.com/jw1222/robust-llm-chain/issues"
+Changelog = "https://github.com/jw1222/robust-llm-chain/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/robust_llm_chain"]

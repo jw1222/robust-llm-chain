@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-04-29
+
 ### Added — v0.1 scope 확장 (Round 0 결정 변경)
 - **OpenAI 어댑터** (`adapters/openai.py`): `ChatOpenAI` (base_url 미설정 → OpenAI 본 endpoint), lazy `langchain_openai` import + `default_factory(OPENAI_API_KEY)` 동작 보장. 10 RED → GREEN.
 - **Bedrock 어댑터** (`adapters/bedrock.py`): `ChatBedrockConverse` (Converse API), `ProviderSpec.region` 전달, AWS credentials 누락 시 boto3 default chain (env / IAM role / `~/.aws/credentials`) 위임. multi-region (east + west) 패턴 검증. 12 RED → GREEN.
