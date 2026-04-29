@@ -17,54 +17,38 @@ from robust_llm_chain import RobustChain
 from robust_llm_chain.backends import LocalBackend
 from robust_llm_chain.errors import NoProvidersConfigured
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Single-vendor and explicit api_key
-# ──────────────────────────────────────────────────────────────────────────────
 
-
-def test_builder_single_anthropic() -> None:
+@pytest.mark.parametrize(
+    "provider_type,model,key",
+    [
+        ("anthropic", "claude-haiku-4-5-20251001", "sk-ant-test"),
+        ("openai", "gpt-4o-mini", "sk-openai-test"),
+        ("openrouter", "anthropic/claude-haiku-4.5", "sk-or-test"),
+    ],
+)
+def test_builder_single_provider(provider_type: str, model: str, key: str) -> None:
     chain = (
         RobustChain.builder()
-        .add_provider(
-            type="anthropic",
-            model="claude-haiku-4-5-20251001",
-            api_key="sk-ant-test-1234567890",
+        .add_provider(type=provider_type, model=model, api_key=key)  # type: ignore[arg-type]
+        .build()
+    )
+    spec = chain._providers[0]
+    assert spec.type == provider_type
+    assert spec.api_key == key
+    assert spec.model.model_id == model
+
+
+def test_builder_unknown_type_raises_at_build_time() -> None:
+    """``add_provider(type="bogus", ...)`` fails fast with a clear ValueError."""
+    with pytest.raises(ValueError) as excinfo:
+        RobustChain.builder().add_provider(
+            type="bogus",  # type: ignore[arg-type]
+            model="m",
+            api_key="k",
         )
-        .build()
-    )
-    assert len(chain._providers) == 1
-    assert chain._providers[0].type == "anthropic"
-    assert chain._providers[0].api_key == "sk-ant-test-1234567890"
-    assert chain._providers[0].model.model_id == "claude-haiku-4-5-20251001"
-
-
-def test_builder_single_openai() -> None:
-    chain = (
-        RobustChain.builder()
-        .add_provider(type="openai", model="gpt-4o-mini", api_key="sk-openai-test")
-        .build()
-    )
-    assert chain._providers[0].type == "openai"
-    assert chain._providers[0].api_key == "sk-openai-test"
-
-
-def test_builder_single_openrouter() -> None:
-    chain = (
-        RobustChain.builder()
-        .add_provider(
-            type="openrouter",
-            model="anthropic/claude-haiku-4.5",
-            api_key="sk-or-test",
-        )
-        .build()
-    )
-    assert chain._providers[0].type == "openrouter"
-    assert chain._providers[0].api_key == "sk-or-test"
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Multi-key and multi-region
-# ──────────────────────────────────────────────────────────────────────────────
+    msg = str(excinfo.value)
+    assert "bogus" in msg
+    assert "anthropic" in msg  # listed in the expected-set
 
 
 def test_builder_multi_key_anthropic() -> None:
@@ -92,35 +76,8 @@ def test_builder_multi_key_anthropic() -> None:
     assert chain._providers[1].api_key == "sk-ant-backup-2"
 
 
-def test_builder_bedrock_multi_region() -> None:
-    """Bedrock east + west — same AWS keys, different region."""
-    chain = (
-        RobustChain.builder()
-        .add_bedrock(
-            model="anthropic.claude-haiku-4-5",
-            region="us-east-1",
-            aws_access_key_id="AKIA-test",
-            aws_secret_access_key="secret-test-do-not-leak",
-            id="bedrock-east",
-        )
-        .add_bedrock(
-            model="anthropic.claude-haiku-4-5",
-            region="us-west-2",
-            aws_access_key_id="AKIA-test",
-            aws_secret_access_key="secret-test-do-not-leak",
-            id="bedrock-west",
-        )
-        .build()
-    )
-    assert len(chain._providers) == 2
-    assert chain._providers[0].region == "us-east-1"
-    assert chain._providers[1].region == "us-west-2"
-    assert chain._providers[0].id == "bedrock-east"
-    assert chain._providers[1].id == "bedrock-west"
-
-
 def test_builder_bedrock_per_region_credentials() -> None:
-    """Bedrock with distinct credentials per region (blast-radius isolation)."""
+    """Bedrock east + west with distinct credentials per region."""
     chain = (
         RobustChain.builder()
         .add_bedrock(
@@ -128,34 +85,22 @@ def test_builder_bedrock_per_region_credentials() -> None:
             region="us-east-1",
             aws_access_key_id="AKIA-east",
             aws_secret_access_key="secret-east",
+            id="bedrock-east",
         )
         .add_bedrock(
             model="anthropic.claude-haiku-4-5",
             region="us-west-2",
             aws_access_key_id="AKIA-west",
             aws_secret_access_key="secret-west",
+            id="bedrock-west",
         )
         .build()
     )
-    assert chain._providers[0].aws_access_key_id == "AKIA-east"
-    assert chain._providers[1].aws_access_key_id == "AKIA-west"
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Mixed vendors
-# ──────────────────────────────────────────────────────────────────────────────
-
-
-def test_builder_mixed_anthropic_openrouter() -> None:
-    chain = (
-        RobustChain.builder()
-        .add_provider(type="anthropic", model="claude-haiku-4-5-20251001", api_key="sk-ant-1")
-        .add_provider(type="openrouter", model="anthropic/claude-haiku-4.5", api_key="sk-or-2")
-        .build()
-    )
     assert len(chain._providers) == 2
-    assert chain._providers[0].type == "anthropic"
-    assert chain._providers[1].type == "openrouter"
+    assert chain._providers[0].region == "us-east-1"
+    assert chain._providers[0].aws_access_key_id == "AKIA-east"
+    assert chain._providers[1].region == "us-west-2"
+    assert chain._providers[1].aws_access_key_id == "AKIA-west"
 
 
 def test_builder_three_way_claude() -> None:
@@ -188,29 +133,12 @@ def test_builder_three_way_claude() -> None:
     assert [p.priority for p in chain._providers] == [0, 1, 2]
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Defaults and ergonomics
-# ──────────────────────────────────────────────────────────────────────────────
-
-
-def test_builder_default_id_auto_unique() -> None:
-    """Two anthropic adds without explicit ``id`` get distinct auto-generated ids."""
+def test_builder_default_id_unique_across_mixed_types() -> None:
+    """Auto-id guarantees uniqueness — exact format is implementation detail."""
     chain = (
         RobustChain.builder()
         .add_provider(type="anthropic", model="m", api_key="k1")
         .add_provider(type="anthropic", model="m", api_key="k2")
-        .build()
-    )
-    ids = [p.id for p in chain._providers]
-    assert len(set(ids)) == 2, f"ids must be unique, got {ids}"
-    assert all(i.startswith("anthropic") for i in ids)
-
-
-def test_builder_default_id_per_type() -> None:
-    """Auto-id counter is per type — bedrock-1 + anthropic-1 coexist."""
-    chain = (
-        RobustChain.builder()
-        .add_provider(type="anthropic", model="m", api_key="k1")
         .add_bedrock(
             model="m",
             region="us-east-1",
@@ -219,8 +147,8 @@ def test_builder_default_id_per_type() -> None:
         )
         .build()
     )
-    ids = {p.id for p in chain._providers}
-    assert ids == {"anthropic-1", "bedrock-1"}
+    ids = [p.id for p in chain._providers]
+    assert len(set(ids)) == len(ids), f"ids must be unique, got {ids}"
 
 
 def test_builder_priority_passthrough() -> None:
@@ -244,11 +172,6 @@ def test_builder_build_passes_kwargs_to_chain() -> None:
     )
     assert chain._backend is backend
     assert chain._temperature == 0.5
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Validation
-# ──────────────────────────────────────────────────────────────────────────────
 
 
 def test_builder_empty_raises_no_providers() -> None:

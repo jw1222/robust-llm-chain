@@ -158,8 +158,16 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
 
             chain = (
                 RobustChain.builder()
-                .add_anthropic(model="claude-haiku-4-5-20251001")
-                .add_openrouter(model="anthropic/claude-haiku-4.5")
+                .add_provider(
+                    type="anthropic",
+                    model="claude-haiku-4-5-20251001",
+                    api_key=os.environ["ANTHROPIC_API_KEY"],
+                )
+                .add_provider(
+                    type="openrouter",
+                    model="anthropic/claude-haiku-4.5",
+                    api_key=os.environ["OPENROUTER_API_KEY"],
+                )
                 .build()
             )
         """

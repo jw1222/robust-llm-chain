@@ -1,9 +1,10 @@
 """Round-robin provider resolver.
 
 Combines a ``list[ProviderSpec]`` with an ``IndexBackend`` to pick the next
-provider for each call. Higher ``ProviderSpec.priority`` is preferred (sorted
-descending). The resolver delegates atomicity to the backend — for
-multi-worker correctness use ``MemcachedBackend``.
+provider for each call. Lower ``ProviderSpec.priority`` is preferred (sorted
+ascending) — same convention as DNS MX records, cron priority, and Linux
+``nice``: smaller number wins. The resolver delegates atomicity to the
+backend — for multi-worker correctness use ``MemcachedBackend``.
 """
 
 from typing import TYPE_CHECKING
@@ -26,9 +27,9 @@ class ProviderResolver:
     ) -> None:
         if not providers:
             raise NoProvidersConfigured("ProviderResolver requires at least one ProviderSpec.")
-        # Sort by priority descending (higher priority first); stable for ties
+        # Sort by priority ascending (lower priority first); stable for ties
         # so the user-listed order is preserved within the same priority.
-        self._providers = sorted(providers, key=lambda p: -p.priority)
+        self._providers = sorted(providers, key=lambda p: p.priority)
         self._backend = backend
         self._key = key
 

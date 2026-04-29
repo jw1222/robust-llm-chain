@@ -68,12 +68,18 @@ def test_separate_keys_have_independent_indices():
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def test_priority_descending_sorts_higher_first():
+def test_priority_ascending_sorts_lower_first():
+    """Lower priority value = higher precedence (DNS MX / cron / nice convention)."""
+
     async def _run():
-        providers = [_spec("low", priority=0), _spec("high", priority=10), _spec("mid", priority=5)]
+        providers = [
+            _spec("primary", priority=0),
+            _spec("tertiary", priority=10),
+            _spec("secondary", priority=5),
+        ]
         resolver = ProviderResolver(providers, LocalBackend(), key="k")
         ids = [(await resolver.next()).id for _ in range(3)]
-        assert ids == ["high", "mid", "low"]
+        assert ids == ["primary", "secondary", "tertiary"]
 
     asyncio.run(_run())
 

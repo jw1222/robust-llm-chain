@@ -37,16 +37,6 @@ def _require(env_vars: list[str]) -> None:
         sys.exit(1)
 
 
-def _content_to_str(content: object) -> str:
-    """LangChain ``BaseMessage.content`` is ``str | list``; Bedrock often returns list."""
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts = [c.get("text", str(c)) if isinstance(c, dict) else str(c) for c in content]
-        return " ".join(parts)
-    return str(content)
-
-
 # ──────────────────────────────────────────────────────────────────────────────
 # Pattern 1 — Multi-key on the same provider
 # ──────────────────────────────────────────────────────────────────────────────
@@ -89,7 +79,7 @@ def multikey() -> None:
     )
     result = asyncio.run(chain.acall("두 줄로 자기소개."))
     print(f"used: {result.provider_used.id} | tokens: {result.usage}")
-    print(f"reply: {_content_to_str(result.output.content)[:100]}")
+    print(f"reply: {str(result.output.content)[:100]}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -136,7 +126,7 @@ def three_way_claude() -> None:
     )
     result = asyncio.run(chain.acall("두 줄로 자기소개."))
     print(f"used: {result.provider_used.id} | model: {result.model_used.model_id}")
-    print(f"reply: {_content_to_str(result.output.content)[:100]}")
+    print(f"reply: {str(result.output.content)[:100]}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -169,7 +159,7 @@ def cross_vendor() -> None:
     )
     result = asyncio.run(chain.acall("두 줄로 자기소개."))
     print(f"used: {result.provider_used.id} | model: {result.model_used.model_id}")
-    print(f"reply: {_content_to_str(result.output.content)[:100]}")
+    print(f"reply: {str(result.output.content)[:100]}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -186,13 +176,11 @@ def multiregion() -> None:
     region-level outage. That's the typical setup and what this example shows.
 
     For blast-radius isolation (separate IAM users per region, cross-account
-    deployments, etc.) read distinct env vars per region — see the
-    commented-out variant below. The variant reads
-    ``AWS_ACCESS_KEY_ID_EAST`` / ``..._WEST`` etc.; those env vars must be
-    exported beforehand. Same naming-convention freedom as ``multikey``
-    above (``_1``/``_2``, ``_PRIMARY``/``_BACKUP``, etc.). To avoid env
-    vars entirely, source the value from a secrets manager:
-    ``aws_access_key_id=vault.get("aws/east/access_key_id")``.
+    deployments, etc.) just read distinct env vars per region — same shape,
+    different ``os.environ[...]`` keys (``AWS_ACCESS_KEY_ID_EAST`` /
+    ``..._WEST``, ``_1``/``_2``, ``_PRIMARY``/``_BACKUP``, whatever your
+    secret store uses). To skip env entirely, source the value from a
+    secrets manager: ``aws_access_key_id=vault.get("aws/east/access_key_id")``.
 
     Required env: ``AWS_ACCESS_KEY_ID``, ``AWS_SECRET_ACCESS_KEY``
     """
@@ -216,28 +204,11 @@ def multiregion() -> None:
             id="bedrock-west",
             priority=1,
         )
-        # Per-region credentials (blast-radius isolation):
-        # .add_bedrock(
-        #     model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
-        #     region="us-east-1",
-        #     aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID_EAST"],
-        #     aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY_EAST"],
-        #     id="bedrock-east",
-        #     priority=0,
-        # )
-        # .add_bedrock(
-        #     model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
-        #     region="us-west-2",
-        #     aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID_WEST"],
-        #     aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY_WEST"],
-        #     id="bedrock-west",
-        #     priority=1,
-        # )
         .build()
     )
     result = asyncio.run(chain.acall("두 줄로 자기소개."))
     print(f"used: {result.provider_used.id} | region: {result.provider_used.region}")
-    print(f"reply: {_content_to_str(result.output.content)[:100]}")
+    print(f"reply: {str(result.output.content)[:100]}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────

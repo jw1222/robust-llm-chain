@@ -238,7 +238,7 @@ result.attempts                     # → [
 - **"multi-key / multi-region / cross-vendor / 명시 priority"** → **`RobustChain.builder()`** (대부분 production 권장). [`examples/builder.py`](examples/builder.py) 참조.
 - "다른 코드에서 `ProviderSpec` 인스턴스를 이미 만들고 있어 (config loader, orchestrator)" → 명시 `providers=[ProviderSpec(...)]` list. 아래 [Advanced usage](#advanced-usage) 섹션의 inline 코드 참조.
 
-> **Builder 와 `from_env` silent-skip 비교:** builder 는 credential 을 **값** 으로 받으므로 source 가 호출 site 에 명시적으로 드러난다. env 에서 (`os.environ["X"]`) 읽는데 var 가 없으면 정확한 이름과 함께 `KeyError`, secrets manager 면 그쪽 라이브러리 에러가 그대로 노출된다. 어느 쪽이든 silent skip 은 없다.
+> **`priority=` 의미:** 낮은 값이 우선 (DNS MX / cron / Linux `nice` 관행). `priority=0` 이 primary, 동률이면 사용자가 추가한 순서 보존.
 
 ### `from_env` 가 인식하는 환경 변수
 

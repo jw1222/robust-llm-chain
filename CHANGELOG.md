@@ -6,6 +6,14 @@
 
 ## [0.3.0] - 2026-04-29
 
+### Changed (BREAKING) — `priority=` semantic 반전 (lower = preferred)
+
+`ProviderResolver` 의 정렬 방향을 descending → ascending 으로 반전. 이제 **낮은 `priority` 값이 먼저 시도** — DNS MX records, cron priority, Linux `nice`, 인프라/큐 분야의 거의 모든 표준 관행과 일치. v0.2.x 의 desc 정렬은 사용자 mental model 과 영구적으로 어긋나는 trap 이라 (`priority=0=primary` 로 주석 달아도 실제 동작은 반대) sub-day-old release 시점에 정정.
+
+**왜 이제야**: codex review (R5) 발견 — README quickstart 의 `priority=0 # primary` / `priority=1 # fallback` 라벨이 `resolver.py:31` 의 `sorted(..., key=lambda p: -p.priority)` 와 정반대로 동작. 첫 사용자가 README 그대로 복붙하면 의도와 거꾸로 traffic 흐름. doc-only fix (라벨만 swap) 보다 semantic-fix (코드를 사용자 직관에 맞춤) 가 영구적 mental-model 부담 0 으로 만듦.
+
+**마이그레이션**: v0.2.x 에서 `priority=10` (primary) / `priority=0` (fallback) 식으로 큰 값 = primary 로 썼다면 값을 swap → `priority=0` (primary) / `priority=10` (fallback). v0.3 의 builder/example/README 는 모두 새 의미 기준 (`priority=0` 이 primary).
+
 ### Changed (BREAKING) — Builder API 단일화
 
 `RobustChain.builder()` 의 4 typed `add_*` 메서드를 `add_provider(type=...)` + `add_bedrock(...)` 두 개로 통합하고, env 읽기를 builder 책임에서 호출자 책임으로 이양. 사용자 dogfooding 피드백 ("env_var 가 모호함 — 어디서 할당하느냐의 문제이지 builder 가 알 일이 아니다") 즉시 반영.

@@ -238,7 +238,7 @@ There are **three ways** to tell `RobustChain` which providers to use. They diff
 - **"Need multi-key / multi-region / cross-vendor / explicit priority"** → **`RobustChain.builder()`** (recommended for most production). See [`examples/builder.py`](examples/builder.py).
 - "Already constructing `ProviderSpec` instances elsewhere in code (config loader, orchestrator)" → explicit `providers=[ProviderSpec(...)]` list. See the inline code in [Advanced usage](#advanced-usage) below.
 
-> **Builder vs `from_env` silent-skip:** the builder takes credential **values**, not env names — so the credential source is explicit at the call site. If you read from env (`os.environ["X"]`) and the var is missing, you get a `KeyError` with the exact name; if you read from a secrets manager, that library's error surface applies. Either way, no silent skip.
+> **`priority=` semantics:** lower value wins (DNS MX / cron / Linux `nice` convention). `priority=0` is the primary; ties preserve user-listed order.
 
 ### Recognized environment variables (for `from_env`)
 

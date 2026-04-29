@@ -1,56 +1,16 @@
-"""Fluent builder for ``RobustChain`` — a third configuration path.
+"""Fluent builder for ``RobustChain``.
 
-The two existing paths (``RobustChain.from_env`` / explicit
-``RobustChain(providers=[...])``) differ in *capability*: ``from_env`` is
-dict-based and limited to one provider per type, the explicit list is
-verbose but expresses everything. The builder collapses that split — every
-pattern (single, multi-key, multi-region, mixed) uses the same chained
-method shape:
-
-    chain = (
-        RobustChain.builder()
-        .add_provider(
-            type="anthropic",
-            model="claude-haiku-4-5-20251001",
-            api_key=os.environ["ANTHROPIC_API_KEY_1"],
-        )
-        .add_provider(
-            type="anthropic",
-            model="claude-haiku-4-5-20251001",
-            api_key=os.environ["ANTHROPIC_API_KEY_2"],
-        )
-        .add_bedrock(
-            model="anthropic.claude-haiku-4-5",
-            region="us-east-1",
-            aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
-            aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
-        )
-        .build()
-    )
-
-**Credentials are passed as values, not env names.** Where the value comes
-from — env var, secrets manager, Vault, a literal for tests — is the
-caller's concern. The builder doesn't read env vars on your behalf. This
-keeps the API single-purpose (assemble specs) and avoids the ambiguous
-``env_var=`` kwarg that mixed *source* with *value*.
-
-**Auto-id**: when ``id=`` is not given, the builder assigns
-``"<type>-<N>"`` (e.g. ``"anthropic-1"``, ``"anthropic-2"``) so every spec
-gets a unique label even with multi-key configurations.
-
-**Two methods, not N**:
-
-- ``add_provider(type=…)`` — single-key providers (Anthropic / OpenAI /
-  OpenRouter). The signature is identical across types; only the ``type``
-  literal changes.
-- ``add_bedrock(...)`` — Bedrock has a different shape (region + two
-  credentials), so it gets its own method instead of polluting
-  ``add_provider`` with kwargs that are dead weight for everyone else.
+Two methods cover every shape: ``add_provider(type=…)`` for single-key
+providers (Anthropic / OpenAI / OpenRouter), and ``add_bedrock(...)`` for
+the asymmetric Bedrock case (region + two credentials). Credentials are
+passed as values — read them from env / Secrets Manager / Vault yourself;
+the builder does not touch ``os.environ``. See README "Provider
+configuration" + ``examples/builder.py`` for full patterns.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, Self, get_args
 
 from robust_llm_chain.types import ModelSpec, ProviderSpec
 
@@ -61,18 +21,18 @@ if TYPE_CHECKING:
 SingleKeyProviderType = Literal["anthropic", "openai", "openrouter"]
 """Providers whose only credential is a single ``api_key`` string."""
 
+_SINGLE_KEY_TYPES: frozenset[str] = frozenset(get_args(SingleKeyProviderType))
+
 
 class RobustChainBuilder:
     """Collect ``ProviderSpec`` s by chained ``add_*`` calls, then ``.build()``."""
 
     def __init__(self) -> None:
         self._specs: list[ProviderSpec] = []
-        self._counts: dict[str, int] = {}
 
-    def _next_id(self, type_: str) -> str:
-        """Return ``"<type>-<N>"`` (e.g. ``"anthropic-1"``)."""
-        self._counts[type_] = self._counts.get(type_, 0) + 1
-        return f"{type_}-{self._counts[type_]}"
+    def _auto_id(self, type_: str) -> str:
+        """Return ``"<type>-<N>"`` where N is the 1-based call order across all adds."""
+        return f"{type_}-{len(self._specs) + 1}"
 
     # ── add methods ─────────────────────────────────────────────────────────
 
@@ -88,10 +48,17 @@ class RobustChainBuilder:
         """Add a single-key provider (Anthropic / OpenAI / OpenRouter).
 
         For Bedrock (region + two credentials) use :meth:`add_bedrock` instead.
+        Lower ``priority`` values are preferred (DNS MX / cron convention).
         """
+        if type not in _SINGLE_KEY_TYPES:
+            raise ValueError(
+                f"Unknown single-key provider type {type!r}. "
+                f"Expected one of {sorted(_SINGLE_KEY_TYPES)}; "
+                f"for Bedrock, call add_bedrock() instead."
+            )
         self._specs.append(
             ProviderSpec(
-                id=id or self._next_id(type),
+                id=id or self._auto_id(type),
                 type=type,
                 model=ModelSpec(model_id=model),
                 api_key=api_key,
@@ -115,10 +82,11 @@ class RobustChainBuilder:
         Unlike single-key providers, Bedrock has *three* required pieces:
         access key id, secret access key, and region. All three are passed
         as values — read them from env / Secrets Manager / Vault yourself.
+        Lower ``priority`` values are preferred.
         """
         self._specs.append(
             ProviderSpec(
-                id=id or self._next_id("bedrock"),
+                id=id or self._auto_id("bedrock"),
                 type="bedrock",
                 model=ModelSpec(model_id=model),
                 aws_access_key_id=aws_access_key_id,
