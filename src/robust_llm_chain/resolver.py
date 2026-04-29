@@ -42,3 +42,26 @@ class ProviderResolver:
         """
         idx = await self._backend.get_and_increment(self._key)
         return self._providers[idx % len(self._providers)]
+
+    async def iterate(self) -> "list[ProviderSpec]":
+        """Return providers in attempt order for one call (failover sequence).
+
+        One backend tick determines the starting point (preserves
+        round-robin + worker coordination); the rest of the priority-sorted
+        list follows in order, wrapping around. Each provider appears
+        exactly once — this is the failover loop's contract: try every
+        configured provider at most once per call, in priority order
+        starting from the resolver-chosen entrypoint.
+
+        Calling ``next()`` inside a per-call retry loop instead would race
+        the global backend index with concurrent calls and could cause one
+        call to retry the same provider while skipping another.
+
+        Raises:
+            BackendUnavailable: When the backend cannot deliver an index
+                (propagated unwrapped from the backend layer).
+        """
+        n = len(self._providers)
+        idx = await self._backend.get_and_increment(self._key)
+        start = idx % n
+        return self._providers[start:] + self._providers[:start]

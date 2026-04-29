@@ -228,7 +228,6 @@ result.attempts                     # → [
 | **같은 타입에 다른 model_id** | ❌ — dict key unique | ✅ — call 별 다른 `model=` | ✅ — spec 별 다른 `model.model_id` |
 | **spec 별 `priority` 순서** | ❌ — 모두 default `0` | ✅ — `priority=` keyword | ✅ — primary→fallback 순서 명시 |
 | API_KEY 누락 동작 | silent skip → 그 provider 만 빠지고 나머지로 build | 호출자에 따라 다름 — `os.environ["..."]` 면 `KeyError`, vault lib 면 그쪽 에러 | n/a (사용자 명시 제공) |
-| Verbosity (3 provider, 대략 줄 수) | 3줄 (dict 하나) | ~12줄 (chained call 하나, provider 마다 명시 api_key) | 15줄 (`ProviderSpec(...)` 하나씩) |
 | Mental model | 12-factor / env-driven | fluent, credentials-as-values | code-as-config |
 | **언제 쓰나** | Dev, 타입당 single-vendor production, env-driven 배포 | **대부분 production — multi-key / multi-region / cross-vendor, credential 은 env / vault / secrets manager 어디서든** | 다른 곳 (config loader, orchestrator) 에서 `ProviderSpec` 인스턴스를 이미 만들고 있을 때 |
 

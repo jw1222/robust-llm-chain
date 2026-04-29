@@ -228,7 +228,6 @@ There are **three ways** to tell `RobustChain` which providers to use. They diff
 | **Different model_ids on the same type** | ❌ — dict key is unique | ✅ — different `model=` per call | ✅ — different `model.model_id` per spec |
 | **Per-spec `priority` ordering** | ❌ — uniform default `0` | ✅ — `priority=` keyword | ✅ — explicit ordering primary→fallback |
 | Missing API_KEY behavior | silent skip → that provider is dropped, others still build | depends on caller — `os.environ["..."]` raises `KeyError`, vault libs raise their own errors | n/a (you supplied the key explicitly) |
-| Verbosity (3 providers, ~lines) | 3 lines (one dict) | ~12 lines (one chained call, explicit api_key per provider) | 15 lines (one `ProviderSpec(...)` per provider) |
 | Mental model | 12-factor / env-driven | fluent, credentials-as-values | code-as-config |
 | **Use when** | Dev, single-vendor-per-type production, env-driven deploys | **Most production use cases — multi-key / multi-region / cross-vendor with credentials sourced from anywhere** | When you already have `ProviderSpec` instances from elsewhere (config loader, orchestrator, etc.) |
 

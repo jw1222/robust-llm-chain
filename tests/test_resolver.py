@@ -123,3 +123,65 @@ def test_backend_unavailable_propagates_unwrapped():
         raise AssertionError("expected BackendUnavailable propagation")
 
     asyncio.run(_run())
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# iterate() — failover attempt sequence
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_iterate_returns_priority_sorted_starting_at_round_robin_index():
+    """One backend tick picks the start; the rest of the priority-sorted list follows."""
+
+    async def _run():
+        providers = [_spec("p0", priority=0), _spec("p1", priority=1), _spec("p2", priority=2)]
+        resolver = ProviderResolver(providers, LocalBackend(), key="k")
+        # First call: idx=0 → start at p0
+        seq1 = [s.id for s in await resolver.iterate()]
+        assert seq1 == ["p0", "p1", "p2"]
+        # Second call: idx=1 → start at p1, wrap around
+        seq2 = [s.id for s in await resolver.iterate()]
+        assert seq2 == ["p1", "p2", "p0"]
+        # Third call: idx=2 → start at p2, wrap around
+        seq3 = [s.id for s in await resolver.iterate()]
+        assert seq3 == ["p2", "p0", "p1"]
+
+    asyncio.run(_run())
+
+
+def test_iterate_each_provider_appears_exactly_once_per_call():
+    """No duplicates within a single ``iterate()`` — failover loop contract."""
+
+    async def _run():
+        providers = [_spec(f"p{i}") for i in range(5)]
+        resolver = ProviderResolver(providers, LocalBackend(), key="k")
+        for _ in range(3):
+            ids = [s.id for s in await resolver.iterate()]
+            assert len(ids) == len(set(ids)) == 5
+
+    asyncio.run(_run())
+
+
+def test_iterate_concurrent_calls_do_not_skip_providers():
+    """Regression: per-call snapshot prevents concurrent acalls from racing the index.
+
+    With per-iter ``next()``, two concurrent acalls could consume each
+    other's indices and cause one call to retry the same provider while
+    skipping another. ``iterate()`` ticks the backend exactly once per
+    call, so each call's attempt sequence is a stable rotation.
+    """
+
+    async def _run():
+        providers = [_spec("a"), _spec("b")]
+        resolver = ProviderResolver(providers, LocalBackend(), key="k")
+        # Two concurrent iterate() calls — each gets its own complete rotation
+        seq_a, seq_b = await asyncio.gather(resolver.iterate(), resolver.iterate())
+        ids_a = [s.id for s in seq_a]
+        ids_b = [s.id for s in seq_b]
+        assert sorted(ids_a) == ["a", "b"]
+        assert sorted(ids_b) == ["a", "b"]
+        # The two rotations are *different* (one starts at 'a', the other at 'b')
+        # because each consumed one backend tick.
+        assert ids_a != ids_b
+
+    asyncio.run(_run())

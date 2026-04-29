@@ -6,13 +6,19 @@
 
 ## [0.3.0] - 2026-04-29
 
+### Fixed — concurrent acall failover skipping providers
+
+`_failover_loop` / `_astream_with_failover` 가 매 retry 마다 `resolver.next()` 를 호출했음 → 글로벌 backend 인덱스가 단조 증가하므로 **두 acall 이 동시에 실행되면 서로의 인덱스를 소비해 한 호출이 같은 provider 를 재시도하면서 다른 provider 는 건너뛸 수 있음** (codex R1 발견, v0.2 부터 잠복). 수정: `ProviderResolver.iterate()` 신설 — 한 acall 당 backend 를 정확히 한 번만 tick 하고, sorted 리스트의 시작 위치를 결정한 뒤 wrap-around 로 모든 provider 를 정확히 한 번씩 반환. chain 의 두 failover 루프가 이를 사용 → "한 호출 안에서 각 provider 를 priority 순으로 정확히 한 번 시도" 의 contract 가 동시성 하에서도 보장됨. `iterate()` 자체에 회귀 테스트 3건 + concurrent `asyncio.gather` 시나리오 포함. `next()` 메서드는 외부 호환을 위해 유지.
+
 ### Changed (BREAKING) — `priority=` semantic 반전 (lower = preferred)
 
 `ProviderResolver` 의 정렬 방향을 descending → ascending 으로 반전. 이제 **낮은 `priority` 값이 먼저 시도** — DNS MX records, cron priority, Linux `nice`, 인프라/큐 분야의 거의 모든 표준 관행과 일치. v0.2.x 의 desc 정렬은 사용자 mental model 과 영구적으로 어긋나는 trap 이라 (`priority=0=primary` 로 주석 달아도 실제 동작은 반대) sub-day-old release 시점에 정정.
 
 **왜 이제야**: codex review (R5) 발견 — README quickstart 의 `priority=0 # primary` / `priority=1 # fallback` 라벨이 `resolver.py:31` 의 `sorted(..., key=lambda p: -p.priority)` 와 정반대로 동작. 첫 사용자가 README 그대로 복붙하면 의도와 거꾸로 traffic 흐름. doc-only fix (라벨만 swap) 보다 semantic-fix (코드를 사용자 직관에 맞춤) 가 영구적 mental-model 부담 0 으로 만듦.
 
-**마이그레이션**: v0.2.x 에서 `priority=10` (primary) / `priority=0` (fallback) 식으로 큰 값 = primary 로 썼다면 값을 swap → `priority=0` (primary) / `priority=10` (fallback). v0.3 의 builder/example/README 는 모두 새 의미 기준 (`priority=0` 이 primary).
+**마이그레이션**:
+- v0.2.x 에서 `priority=10` (primary) / `priority=0` (fallback) 식으로 *큰 값 = primary* 로 썼다면 값을 swap → `priority=0` (primary) / `priority=10` (fallback).
+- v0.2.x README 예시를 그대로 따라 `priority=0` 을 primary 의도로 썼던 사용자는 실제로는 *fallback-first* 로 동작하던 trap 에 걸려 있었음 — v0.3 업그레이드 시 코드는 그대로지만 트래픽이 비로소 README 가 약속한 분포로 흐름. **traffic mix 가 의미 있는 production 이라면 monitoring 필요.**
 
 ### Changed (BREAKING) — Builder API 단일화
 
@@ -26,7 +32,8 @@
 1. `env_var=` 가 "어디서 가져오는가" (source) 와 "값 자체" (value) 를 한 kwarg 에 섞어 모호. `api_key=` 단일화로 source 는 호출자, value 는 builder 라는 책임 분리가 명확해짐.
 2. secrets manager / Vault / hardcoded test fixture 등 env 외 source 가 first-class — 더 이상 "env_var 라는 이름의 default 가 있는데 우회하려면 api_key=" 같은 escape-hatch 설명 불필요.
 3. 4 typed 메서드 (60+ LOC 복붙) → 2 메서드 (~30 LOC) 로 surface 감소, 신규 single-key provider (Cohere / Mistral / …) 추가 시 `Literal` 한 글자 추가만으로 가능.
-4. v0.2.0 ship 직후 (사용자 거의 없는 시점) — 마이그레이션 비용이 가장 낮은 타이밍.
+
+(두 BREAKING 모두 v0.2.0 ship 직후의 sub-day-old 타이밍을 활용 — 마이그레이션 비용이 가장 낮은 시점에 한 PR 으로 묶어 처리.)
 
 **마이그레이션** (before → after):
 

@@ -53,6 +53,14 @@ from robust_llm_chain.types import (
     TokenUsage,
 )
 
+type _TryFirstChunkResult = tuple[
+    BaseMessageChunk | None,
+    AsyncIterator[BaseMessageChunk] | None,
+    float,
+    BaseException | None,
+]
+"""Internal: ``(first_chunk_or_None, agen_or_None, attempt_start, exc_or_None)``."""
+
 #: Module-level logger for ``RobustChain.from_env`` and other classmethod paths
 #: where the per-instance ``self._logger`` is not yet available.
 _module_logger = logging.getLogger("robust_llm_chain.chain")
@@ -399,8 +407,7 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
         temperature: float | None,
     ) -> ChainResult:
         last_error: BaseException | None = None
-        for _ in range(len(self._providers)):
-            spec = await self._resolver.next()
+        for spec in await self._resolver.iterate():
             attempt_start = time.monotonic()
             try:
                 model = self._build_model(spec, max_tokens, temperature)
@@ -440,37 +447,36 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
     ) -> AsyncIterator[BaseMessageChunk]:
         start = time.monotonic()
         attempts: list[AttemptRecord] = []
-        result = self._provisional_result(messages, attempts)
+        attempt_order = await self._resolver.iterate()
+        result = self._provisional_result(messages, attempts, attempt_order[0])
         _LAST_RESULT.set(result)
 
         last_error: BaseException | None = None
-        for _ in range(len(self._providers)):
-            spec = await self._resolver.next()
+        for spec in attempt_order:
             first_chunk, agen, attempt_start, exc = await self._try_first_chunk(
                 spec, messages, attempts, max_tokens, temperature
             )
             if first_chunk is None:
                 last_error = exc
                 continue
-            # Post-commit phase. Ownership transferred to the caller.
+            # Post-commit: ownership transfers to caller; StreamExecutor.stream's
+            # own finally handles aclose for the underlying agen.
             assert agen is not None
-            try:
-                async for chunk in self._post_commit_stream(
-                    first_chunk, agen, spec, result, attempt_start, attempts, start
-                ):
-                    yield chunk
-            finally:
-                # StreamExecutor.stream's own finally handles aclose.
-                pass
+            async for chunk in self._post_commit_stream(
+                first_chunk, agen, spec, result, attempt_start, attempts, start
+            ):
+                yield chunk
             await self._update_totals(result)
             return
 
         raise AllProvidersFailed(attempts=attempts) from last_error
 
     def _provisional_result(
-        self, messages: list[BaseMessage], attempts: list[AttemptRecord]
+        self,
+        messages: list[BaseMessage],
+        attempts: list[AttemptRecord],
+        first_spec: ProviderSpec,
     ) -> ChainResult:
-        first_spec = self._providers[0]
         return ChainResult(
             input=messages,
             output=AIMessage(content=""),
@@ -489,7 +495,7 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
         attempts: list[AttemptRecord],
         max_tokens: int | None,
         temperature: float | None,
-    ) -> "tuple[BaseMessageChunk | None, AsyncIterator[BaseMessageChunk] | None, float, BaseException | None]":  # noqa: E501
+    ) -> "_TryFirstChunkResult":
         attempt_start = time.monotonic()
         try:
             model = self._build_model(spec, max_tokens, temperature)

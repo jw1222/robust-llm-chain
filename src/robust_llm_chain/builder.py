@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 SingleKeyProviderType = Literal["anthropic", "openai", "openrouter"]
 """Providers whose only credential is a single ``api_key`` string."""
 
-_SINGLE_KEY_TYPES: frozenset[str] = frozenset(get_args(SingleKeyProviderType))
+_SINGLE_KEY_TYPES: tuple[str, ...] = get_args(SingleKeyProviderType)
 
 
 class RobustChainBuilder:
@@ -29,10 +29,6 @@ class RobustChainBuilder:
 
     def __init__(self) -> None:
         self._specs: list[ProviderSpec] = []
-
-    def _auto_id(self, type_: str) -> str:
-        """Return ``"<type>-<N>"`` where N is the 1-based call order across all adds."""
-        return f"{type_}-{len(self._specs) + 1}"
 
     # ── add methods ─────────────────────────────────────────────────────────
 
@@ -53,12 +49,12 @@ class RobustChainBuilder:
         if type not in _SINGLE_KEY_TYPES:
             raise ValueError(
                 f"Unknown single-key provider type {type!r}. "
-                f"Expected one of {sorted(_SINGLE_KEY_TYPES)}; "
+                f"Expected one of {list(_SINGLE_KEY_TYPES)}; "
                 f"for Bedrock, call add_bedrock() instead."
             )
         self._specs.append(
             ProviderSpec(
-                id=id or self._auto_id(type),
+                id=id or f"{type}-{len(self._specs) + 1}",
                 type=type,
                 model=ModelSpec(model_id=model),
                 api_key=api_key,
@@ -86,7 +82,7 @@ class RobustChainBuilder:
         """
         self._specs.append(
             ProviderSpec(
-                id=id or self._auto_id("bedrock"),
+                id=id or f"bedrock-{len(self._specs) + 1}",
                 type="bedrock",
                 model=ModelSpec(model_id=model),
                 aws_access_key_id=aws_access_key_id,

@@ -76,31 +76,45 @@ def test_builder_multi_key_anthropic() -> None:
     assert chain._providers[1].api_key == "sk-ant-backup-2"
 
 
-def test_builder_bedrock_per_region_credentials() -> None:
-    """Bedrock east + west with distinct credentials per region."""
+@pytest.mark.parametrize(
+    "ak_east,sk_east,ak_west,sk_west",
+    [
+        # Typical: one IAM user covers all regions (AWS credentials are region-agnostic).
+        ("AKIA-shared", "secret-shared", "AKIA-shared", "secret-shared"),
+        # Blast-radius isolation: distinct IAM users per region.
+        ("AKIA-east", "secret-east", "AKIA-west", "secret-west"),
+    ],
+    ids=["shared_credentials", "per_region_credentials"],
+)
+def test_builder_bedrock_multi_region(
+    ak_east: str, sk_east: str, ak_west: str, sk_west: str
+) -> None:
+    """Bedrock east + west — covers both shared-creds (typical) and per-region cases."""
     chain = (
         RobustChain.builder()
         .add_bedrock(
             model="anthropic.claude-haiku-4-5",
             region="us-east-1",
-            aws_access_key_id="AKIA-east",
-            aws_secret_access_key="secret-east",
+            aws_access_key_id=ak_east,
+            aws_secret_access_key=sk_east,
             id="bedrock-east",
         )
         .add_bedrock(
             model="anthropic.claude-haiku-4-5",
             region="us-west-2",
-            aws_access_key_id="AKIA-west",
-            aws_secret_access_key="secret-west",
+            aws_access_key_id=ak_west,
+            aws_secret_access_key=sk_west,
             id="bedrock-west",
         )
         .build()
     )
     assert len(chain._providers) == 2
+    assert chain._providers[0].id == "bedrock-east"
     assert chain._providers[0].region == "us-east-1"
-    assert chain._providers[0].aws_access_key_id == "AKIA-east"
+    assert chain._providers[0].aws_access_key_id == ak_east
+    assert chain._providers[1].id == "bedrock-west"
     assert chain._providers[1].region == "us-west-2"
-    assert chain._providers[1].aws_access_key_id == "AKIA-west"
+    assert chain._providers[1].aws_access_key_id == ak_west
 
 
 def test_builder_three_way_claude() -> None:
