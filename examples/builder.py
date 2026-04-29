@@ -136,6 +136,15 @@ def cross_vendor() -> None:
 def multiregion() -> None:
     """Bedrock east → west failover for region-level resilience.
 
+    AWS credentials are **region-agnostic** — one IAM user's access key works
+    in every region, so a single ``AWS_ACCESS_KEY_ID`` /
+    ``AWS_SECRET_ACCESS_KEY`` pair is all you need to defend against a
+    region-level outage. That's the typical setup and what this example shows.
+
+    For blast-radius isolation (separate IAM users per region, cross-account
+    deployments, etc.) pass per-region credentials explicitly — see the
+    commented-out variant below.
+
     Required env: ``AWS_ACCESS_KEY_ID``, ``AWS_SECRET_ACCESS_KEY``
     """
     _require(["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"])
@@ -154,6 +163,23 @@ def multiregion() -> None:
             id="bedrock-west",
             priority=1,
         )
+        # Per-region credentials (blast-radius isolation):
+        # .add_bedrock(
+        #     model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        #     region="us-east-1",
+        #     aws_access_key_env="AWS_ACCESS_KEY_ID_EAST",
+        #     aws_secret_env="AWS_SECRET_ACCESS_KEY_EAST",
+        #     id="bedrock-east",
+        #     priority=0,
+        # )
+        # .add_bedrock(
+        #     model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        #     region="us-west-2",
+        #     aws_access_key_env="AWS_ACCESS_KEY_ID_WEST",
+        #     aws_secret_env="AWS_SECRET_ACCESS_KEY_WEST",
+        #     id="bedrock-west",
+        #     priority=1,
+        # )
         .build()
     )
     result = asyncio.run(chain.acall("두 줄로 자기소개."))
