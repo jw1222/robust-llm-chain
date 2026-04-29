@@ -30,6 +30,7 @@ def _reset_adapter_registry() -> None:
 _KEY_BY_MARKER: dict[str, str] = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openrouter": "OPENROUTER_API_KEY",
+    "openai": "OPENAI_API_KEY",
     "bedrock": "AWS_ACCESS_KEY_ID",  # also requires AWS_SECRET_ACCESS_KEY / AWS_REGION
 }
 

@@ -76,16 +76,16 @@ print(result.provider_used.id, result.usage)     # metadata
 | Command | What's included |
 |---|---|
 | `pip install robust-llm-chain` | Core only. No adapters → `from_env()` raises `NoProvidersConfigured` |
-| `pip install "robust-llm-chain[anthropic]"` | + `langchain-anthropic` |
-| `pip install "robust-llm-chain[openrouter]"` | + `langchain-openai` (OpenRouter speaks the OpenAI-compatible API) |
-| `pip install "robust-llm-chain[memcached]"` | + `aiomcache` (async client) |
-| `pip install "robust-llm-chain[bedrock]"` | + `langchain-aws` — **placeholder, activates in v0.2** |
-| `pip install "robust-llm-chain[openai]"` | + `langchain-openai` — **placeholder, activates in v0.2** |
+| `pip install "robust-llm-chain[anthropic]"` | + `langchain-anthropic` (Anthropic Direct) |
+| `pip install "robust-llm-chain[openrouter]"` | + `langchain-openai` (OpenRouter — OpenAI-compatible API) |
+| `pip install "robust-llm-chain[openai]"` | + `langchain-openai` (OpenAI Direct) |
+| `pip install "robust-llm-chain[bedrock]"` | + `langchain-aws` (AWS Bedrock — Claude / Llama / Nova / etc.) |
+| `pip install "robust-llm-chain[memcached]"` | + `aiomcache` (async client for worker-coordinated round-robin) |
 | `pip install "robust-llm-chain[redis]"` | + `redis` — **placeholder, activates in v0.2** |
-| `pip install "robust-llm-chain[anthropic,openrouter,memcached]"` | Recommended v0.1 production combo |
-| `pip install "robust-llm-chain[all]"` | All adapters and backends shipped in v0.1 |
+| `pip install "robust-llm-chain[anthropic,openrouter,bedrock,memcached]"` | Recommended v0.1 production combo (3-way Claude failover) |
+| `pip install "robust-llm-chain[all]"` | Every adapter and backend shipped in v0.1 |
 
-> **Placeholder extras policy:** `[bedrock]` / `[openai]` / `[redis]` install fine but are inactive in v0.1. Calling them raises `ProviderInactive` with a clear message. Pre-installing lets you upgrade to v0.2 without dependency churn.
+> **Placeholder extras policy:** `[redis]` installs fine but is inactive in v0.1. Calling it raises `ProviderInactive` with a clear message. Pre-installing lets you upgrade to v0.2 without dependency churn.
 
 The library does **not** depend on `python-dotenv`. Loading `.env` files is up to your application.
 
@@ -98,9 +98,11 @@ Recognized by `RobustChain.from_env()`:
 | Variable | Provider | Active in v0.1 | Notes |
 |---|---|---|---|
 | `ANTHROPIC_API_KEY` | anthropic | ✅ | Anthropic Direct |
-| `OPENROUTER_API_KEY` | openrouter | ✅ | OpenRouter |
-| `OPENAI_API_KEY` | openai | ❌ (v0.2) | Adapter ships in v0.2 |
-| `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` + `AWS_REGION` | bedrock | ❌ (v0.2) | Adapter ships in v0.2 |
+| `OPENROUTER_API_KEY` | openrouter | ✅ | OpenRouter (any vendor's model) |
+| `OPENAI_API_KEY` | openai | ✅ | OpenAI Direct (`gpt-*`, `o1-*`, etc.) |
+| `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` + `AWS_REGION` | bedrock | ✅ | All three required; missing any one → provider skipped |
+
+> **`from_env()` covers the simple "one provider per type" path.** For multi-key (e.g. primary + backup Anthropic keys) or multi-region (Bedrock east + west) patterns, build the `ProviderSpec` list explicitly — see [Advanced usage](#advanced-usage).
 
 ---
 
@@ -133,15 +135,19 @@ Recognized by `RobustChain.from_env()`:
 2. **Worker-coordinated round-robin.** (v0.1: Memcached, v0.2: Redis)
    In a multi-worker deployment (gunicorn × 8, etc.), most OSS libraries hold the round-robin index per process. With 8 workers that means 8 simultaneous requests can land on the same provider. This library shares the index through a backend (Memcached or your own implementation of `IndexBackend`) so the load actually spreads.
 
-3. **Cross-vendor same-model failover.**
-   Same prompt, same model, different vendor — that's real failover. v0.1 active pair: **Anthropic Direct ↔ OpenRouter** (both reach Claude). v0.2 adds Bedrock for 3-way failover including cross-region (us-east-1 / us-west-2) splits.
+3. **Cross-vendor (and cross-model) failover.**
+   Same prompt, multiple paths. v0.1 active providers: **Anthropic Direct + OpenRouter + OpenAI Direct + AWS Bedrock**. Common patterns:
+   - **Same-model 3-way failover** for Claude — Anthropic Direct ↔ Bedrock (us-east-1) ↔ OpenRouter
+   - **Cross-region** within Bedrock — `id="bedrock-east"` (`us-east-1`) ↔ `id="bedrock-west"` (`us-west-2`)
+   - **Cross-vendor cross-model** — Claude on Anthropic ↔ GPT on OpenAI when "we just need *some* answer"
+   - **Multi-key per vendor** — `id="anthropic-primary"` ↔ `id="anthropic-backup"` for tenant isolation or rate-limit headroom
 
 ---
 
 ## Who is this for
 
 - Long-running multi-worker Python services (FastAPI + gunicorn, Django, Celery)
-- Teams using Anthropic Direct + OpenRouter together (or alternately) — v0.2 will add Bedrock and OpenAI
+- Teams running Claude across **multiple paths** (Anthropic Direct + Bedrock + OpenRouter), or mixing **Claude + GPT** for survivability
 - Anyone who has actually been paged at 3am because of `529 Overloaded` or stalled streams
 - Existing LangChain `Runnable` users — drop-in compatible
 
@@ -210,6 +216,73 @@ chain = RobustChain(
     ],
     timeouts=TimeoutConfig(per_provider=60.0, first_token=15.0),
 )
+```
+
+### Multiple keys per vendor (primary + backup)
+```python
+import os
+from robust_llm_chain import RobustChain, ProviderSpec, ModelSpec
+
+# Two Anthropic API keys — round-robin between them, fall over if one rate-limits.
+chain = RobustChain(providers=[
+    ProviderSpec(
+        id="anthropic-primary",
+        type="anthropic",
+        api_key=os.environ["ANTHROPIC_API_KEY"],
+        model=ModelSpec(model_id="claude-haiku-4-5-20251001"),
+    ),
+    ProviderSpec(
+        id="anthropic-backup",
+        type="anthropic",
+        api_key=os.environ["ANTHROPIC_API_KEY_BACKUP"],
+        model=ModelSpec(model_id="claude-haiku-4-5-20251001"),
+    ),
+])
+```
+
+### Bedrock cross-region failover (us-east-1 ↔ us-west-2)
+```python
+import os
+from robust_llm_chain import RobustChain, ProviderSpec, ModelSpec
+
+chain = RobustChain(providers=[
+    ProviderSpec(
+        id="bedrock-east",
+        type="bedrock",
+        aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+        region="us-east-1",
+        model=ModelSpec(model_id="anthropic.claude-haiku-4-5-20251001-v1:0"),
+    ),
+    ProviderSpec(
+        id="bedrock-west",
+        type="bedrock",
+        aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+        region="us-west-2",
+        model=ModelSpec(model_id="anthropic.claude-haiku-4-5-20251001-v1:0"),
+    ),
+])
+```
+
+### Cross-vendor same-model: 3-way Claude (Anthropic + Bedrock + OpenRouter)
+```python
+chain = RobustChain.from_env(model_ids={
+    "anthropic":  "claude-haiku-4-5-20251001",
+    "bedrock":    "anthropic.claude-haiku-4-5-20251001-v1:0",
+    "openrouter": "anthropic/claude-haiku-4.5",
+})
+# Round-robin between three paths to Claude. If Anthropic 529s, fall to
+# Bedrock or OpenRouter automatically.
+```
+
+### Cross-vendor cross-model: Claude → GPT
+```python
+chain = RobustChain.from_env(model_ids={
+    "anthropic": "claude-haiku-4-5-20251001",
+    "openai":    "gpt-4o-mini",
+})
+# When "we just need some answer" matters more than "exactly the same model".
 ```
 
 ### Streaming

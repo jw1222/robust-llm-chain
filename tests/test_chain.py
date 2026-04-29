@@ -413,13 +413,149 @@ def test_from_env_zero_active_raises_no_providers_configured(monkeypatch):
     raise AssertionError("expected NoProvidersConfigured")
 
 
-def test_from_env_inactive_v0_1_adapter_raises_provider_inactive(monkeypatch):
+def test_from_env_inactive_adapter_raises_provider_inactive(monkeypatch):
+    """``redis`` is the remaining placeholder type after v0.1 added bedrock/openai."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     try:
-        RobustChain.from_env(model_ids={"bedrock": "anthropic.claude-haiku-4-5"})
+        RobustChain.from_env(model_ids={"redis": "ignored"})
     except ProviderInactive as exc:
-        assert "bedrock" in str(exc).lower()
+        assert "redis" in str(exc).lower()
         return
-    raise AssertionError("expected ProviderInactive for bedrock in v0.1")
+    raise AssertionError("expected ProviderInactive for redis (still placeholder)")
+
+
+def test_from_env_openai_active(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-test-1234567890")
+
+    chain = RobustChain.from_env(model_ids={"openai": "gpt-4o-mini"})
+
+    assert len(chain._providers) == 1
+    assert chain._providers[0].type == "openai"
+    assert chain._providers[0].api_key == "sk-openai-test-1234567890"
+
+
+def test_from_env_bedrock_active_when_all_three_aws_envs_set(monkeypatch):
+    for env_var in ("ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(env_var, raising=False)
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIATEST123456")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret-test-value-1234")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+
+    chain = RobustChain.from_env(model_ids={"bedrock": "anthropic.claude-haiku-4-5-20251001-v1:0"})
+
+    assert len(chain._providers) == 1
+    spec = chain._providers[0]
+    assert spec.type == "bedrock"
+    assert spec.region == "us-east-1"
+    assert spec.aws_access_key_id == "AKIATEST123456"
+    assert spec.aws_secret_access_key == "secret-test-value-1234"
+    # No api_key — bedrock uses AWS creds.
+    assert spec.api_key is None
+
+
+def test_from_env_bedrock_skipped_when_aws_region_missing(monkeypatch):
+    """Partial AWS creds (no AWS_REGION) → Bedrock provider skipped, not raised."""
+    for env_var in ("ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(env_var, raising=False)
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIA")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret")
+    monkeypatch.delenv("AWS_REGION", raising=False)
+
+    try:
+        RobustChain.from_env(model_ids={"bedrock": "anthropic.claude-haiku-4-5-20251001-v1:0"})
+    except NoProvidersConfigured:
+        return
+    raise AssertionError("expected NoProvidersConfigured when AWS_REGION absent")
+
+
+def test_from_env_all_four_active(monkeypatch):
+    """Cross-vendor + cross-model: all four providers active with their env vars."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-oai-test")
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIA")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+
+    chain = RobustChain.from_env(
+        model_ids={
+            "anthropic": "claude-haiku-4-5-20251001",
+            "openrouter": "anthropic/claude-haiku-4.5",
+            "openai": "gpt-4o-mini",
+            "bedrock": "anthropic.claude-haiku-4-5-20251001-v1:0",
+        }
+    )
+    types = {p.type for p in chain._providers}
+    assert types == {"anthropic", "openrouter", "openai", "bedrock"}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Multi-key registration — same provider type, different ids
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_multiple_specs_same_type_distinct_ids_round_robin():
+    """Two ProviderSpecs with same ``type`` but different ``id`` are valid and
+    independently selected by the round-robin resolver — supports patterns
+    like primary + backup Anthropic keys, or Bedrock east + west regions."""
+
+    async def _run():
+        adapter = _setup()
+        adapter.set_response("anthropic-direct-1", text="from key 1")
+        adapter.set_response("anthropic-direct-2", text="from key 2")
+
+        chain = RobustChain(
+            providers=[
+                ProviderSpec(
+                    id="anthropic-direct-1",
+                    type="fake",
+                    model=ModelSpec(model_id="m"),
+                    api_key="sk-key-1",
+                ),
+                ProviderSpec(
+                    id="anthropic-direct-2",
+                    type="fake",
+                    model=ModelSpec(model_id="m"),
+                    api_key="sk-key-2",
+                ),
+            ]
+        )
+
+        ids = []
+        for _ in range(4):
+            r = await chain.acall("hi")
+            ids.append(r.provider_used.id)
+
+        # Round-robin alternates between the two ids.
+        assert ids == [
+            "anthropic-direct-1",
+            "anthropic-direct-2",
+            "anthropic-direct-1",
+            "anthropic-direct-2",
+        ]
+
+    asyncio.run(_run())
+
+
+def test_multiple_same_type_chain_key_includes_all_ids():
+    """The resolver key must distinguish chains with overlapping types/ids."""
+
+    chain_a = RobustChain(
+        providers=[
+            ProviderSpec(id="a-1", type="fake", model=ModelSpec(model_id="m")),
+            ProviderSpec(id="a-2", type="fake", model=ModelSpec(model_id="m")),
+        ]
+    )
+    chain_b = RobustChain(
+        providers=[
+            ProviderSpec(id="a-1", type="fake", model=ModelSpec(model_id="m")),
+            ProviderSpec(id="b-2", type="fake", model=ModelSpec(model_id="m")),
+        ]
+    )
+    # Distinct chain keys → distinct backend counters.
+    assert chain_a._make_chain_key() != chain_b._make_chain_key()

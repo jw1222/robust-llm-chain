@@ -31,17 +31,13 @@ def test_two_providers_happy_path_uses_first():
                     id="anthropic-direct",
                     type="anthropic",
                     api_key=os.environ["ANTHROPIC_API_KEY"],
-                    model=ModelSpec(
-                        model_id="claude-haiku-4-5-20251001", max_output_tokens=20
-                    ),
+                    model=ModelSpec(model_id="claude-haiku-4-5-20251001", max_output_tokens=20),
                 ),
                 ProviderSpec(
                     id="openrouter",
                     type="openrouter",
                     api_key=os.environ["OPENROUTER_API_KEY"],
-                    model=ModelSpec(
-                        model_id="anthropic/claude-haiku-4.5", max_output_tokens=20
-                    ),
+                    model=ModelSpec(model_id="anthropic/claude-haiku-4.5", max_output_tokens=20),
                 ),
             ],
             timeouts=TimeoutConfig(per_provider=30.0, first_token=15.0),
@@ -90,9 +86,7 @@ def test_first_provider_first_token_timeout_falls_back_to_second():
                     id="openrouter",
                     type="openrouter",
                     api_key=os.environ["OPENROUTER_API_KEY"],
-                    model=ModelSpec(
-                        model_id="anthropic/claude-haiku-4.5", max_output_tokens=20
-                    ),
+                    model=ModelSpec(model_id="anthropic/claude-haiku-4.5", max_output_tokens=20),
                 ),
             ],
             timeouts=TimeoutConfig(per_provider=30.0, first_token=15.0),
@@ -114,8 +108,6 @@ def test_first_provider_first_token_timeout_falls_back_to_second():
         # If we did get a result, it must be OpenRouter — Anthropic with a
         # bogus model id cannot have answered.
         assert result.provider_used.id == "openrouter"
-        assert any(
-            attempt.provider_id == "anthropic-broken" for attempt in result.attempts
-        )
+        assert any(attempt.provider_id == "anthropic-broken" for attempt in result.attempts)
 
     asyncio.run(_run())

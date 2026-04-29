@@ -4,6 +4,18 @@
 
 ## [Unreleased]
 
+### Added — v0.1 scope 확장 (Round 0 결정 변경)
+- **OpenAI 어댑터** (`adapters/openai.py`): `ChatOpenAI` (base_url 미설정 → OpenAI 본 endpoint), lazy `langchain_openai` import + `default_factory(OPENAI_API_KEY)` 동작 보장. 10 RED → GREEN.
+- **Bedrock 어댑터** (`adapters/bedrock.py`): `ChatBedrockConverse` (Converse API), `ProviderSpec.region` 전달, AWS credentials 누락 시 boto3 default chain (env / IAM role / `~/.aws/credentials`) 위임. multi-region (east + west) 패턴 검증. 12 RED → GREEN.
+- **`from_env`** 활성 type 확장: `anthropic` / `openrouter` / `openai` / `bedrock` 모두 지원. Bedrock 은 세 AWS env (`AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` + `AWS_REGION`) 모두 있을 때만 활성, 부분 누락 시 silent skip.
+- **다중 키 / 다중 region 등록 회귀 보호**: 같은 `type` 에 다른 `id` 로 여러 ProviderSpec 등록 가능 (이전부터 코드 차원 가능했으나 README 만 보고는 "type 별 1개" 처럼 보였음 → 회귀 테스트 + Advanced usage 패턴 명시).
+- **`pyproject.toml` extras 정리**: `openai` / `bedrock` 활성, `all` 에 `langchain-aws` 포함, placeholder 는 `redis` 만 남김.
+
+### Changed
+- **Round 0 결정 변경** (REVIEW_DECISIONS): "v0.1 = Anthropic + OpenRouter 만" → "v0.1 = Anthropic + OpenRouter + OpenAI + Bedrock". 사용자 결정: cross-vendor *and* cross-model failover 가 1차 라이브러리에 모두 포함되어야 한다는 정신.
+- README: extras 표 / env 표 / "Three things" / "Who is this for" / Advanced usage 갱신. multi-key, multi-region (Bedrock east/west), 3-way Claude (Anthropic + Bedrock + OpenRouter), Claude → GPT cross-vendor cross-model 패턴 추가.
+- `.env.example`: OpenAI / Bedrock 의 v0.2 라벨 제거.
+
 ### Added — Phase 4 (T1~T13) 완료
 - **공개 데이터 모델** (`types.py`): `RobustChainInput` PEP 695 alias, `ProviderSpec` (slots + `__repr__` 마스킹), `ModelSpec`, `PricingSpec`, `TokenUsage` (`__add__`/`__iadd__`), `CostEstimate`, `ChainResult` (mutable, astream lifecycle), `AttemptRecord`, `TimeoutConfig`.
 - **에러 계층** (`errors.py`): `RobustChainError` 베이스 + 10 전문화 클래스, `is_fallback_eligible` 3단계 분류 (typed → SDK class → keyword).

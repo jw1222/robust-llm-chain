@@ -1008,6 +1008,7 @@ dependencies = [
 all = [
     { name = "aiomcache" },
     { name = "langchain-anthropic" },
+    { name = "langchain-aws" },
     { name = "langchain-openai" },
 ]
 anthropic = [
@@ -1042,6 +1043,7 @@ requires-dist = [
     { name = "aiomcache", marker = "extra == 'memcached'", specifier = ">=0.8" },
     { name = "langchain-anthropic", marker = "extra == 'all'", specifier = ">=0.2" },
     { name = "langchain-anthropic", marker = "extra == 'anthropic'", specifier = ">=0.2" },
+    { name = "langchain-aws", marker = "extra == 'all'", specifier = ">=0.2" },
     { name = "langchain-aws", marker = "extra == 'bedrock'", specifier = ">=0.2" },
     { name = "langchain-core", specifier = ">=0.3" },
     { name = "langchain-openai", marker = "extra == 'all'", specifier = ">=0.2" },
@@ -1054,7 +1056,7 @@ requires-dist = [
     { name = "redis", marker = "extra == 'redis'", specifier = ">=5.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7" },
 ]
-provides-extras = ["anthropic", "openrouter", "memcached", "bedrock", "openai", "redis", "all", "dev"]
+provides-extras = ["anthropic", "openrouter", "openai", "bedrock", "memcached", "redis", "all", "dev"]
 
 [[package]]
 name = "ruff"

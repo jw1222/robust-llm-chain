@@ -24,6 +24,8 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from robust_llm_chain._security import sanitize_message
 from robust_llm_chain.adapters import _ADAPTER_REGISTRY, get_adapter, register_adapter
 from robust_llm_chain.adapters.anthropic import AnthropicAdapter
+from robust_llm_chain.adapters.bedrock import BedrockAdapter
+from robust_llm_chain.adapters.openai import OpenAIAdapter
 from robust_llm_chain.adapters.openrouter import OpenRouterAdapter
 from robust_llm_chain.backends import IndexBackend, LocalBackend
 from robust_llm_chain.errors import (
@@ -57,19 +59,50 @@ _LAST_RESULT: contextvars.ContextVar[ChainResult | None] = contextvars.ContextVa
 # Built-in adapters registered lazily when a chain instance is created. A
 # placeholder dict ensures ``conftest._reset_adapter_registry`` snapshots them
 # on first chain construction inside a test, then restores after.
-_V01_ACTIVE_TYPES: frozenset[str] = frozenset({"anthropic", "openrouter"})
-_V02_PLACEHOLDER_TYPES: frozenset[str] = frozenset({"bedrock", "openai"})
+_V01_ACTIVE_TYPES: frozenset[str] = frozenset({"anthropic", "openrouter", "openai", "bedrock"})
+# Reserved for v0.2 — non-LLM adapter types still listed so ``from_env`` can
+# raise a clear ``ProviderInactive`` instead of a confusing KeyError.
+_V02_PLACEHOLDER_TYPES: frozenset[str] = frozenset({"redis"})
 
 _TOTAL_TIMEOUT_BUFFER_SEC: float = 60.0
 _TOTAL_TIMEOUT_CAP_SEC: float = 360.0
 
 
 def _ensure_builtin_adapters_registered() -> None:
-    """Register ``anthropic`` / ``openrouter`` once per registry snapshot."""
+    """Register the four built-in adapters once per registry snapshot."""
     if "anthropic" not in _ADAPTER_REGISTRY:
         register_adapter(AnthropicAdapter())
     if "openrouter" not in _ADAPTER_REGISTRY:
         register_adapter(OpenRouterAdapter())
+    if "openai" not in _ADAPTER_REGISTRY:
+        register_adapter(OpenAIAdapter())
+    if "bedrock" not in _ADAPTER_REGISTRY:
+        register_adapter(BedrockAdapter())
+
+
+def _build_provider_spec(ptype: str, model_id: str, creds: dict[str, str]) -> ProviderSpec:
+    """Map ``credentials_present`` output to the appropriate ``ProviderSpec`` shape.
+
+    Bedrock returns ``aws_access_key_id`` / ``aws_secret_access_key`` /
+    ``region``; everything else returns ``api_key``. ``from_env`` only sets
+    the matching fields and leaves the rest at their defaults so the
+    masking ``__repr__`` and adapter-side credential resolution stay clean.
+    """
+    if ptype == "bedrock":
+        return ProviderSpec(
+            id=ptype,
+            type=ptype,
+            model=ModelSpec(model_id=model_id),
+            aws_access_key_id=creds.get("aws_access_key_id"),
+            aws_secret_access_key=creds.get("aws_secret_access_key"),
+            region=creds.get("region"),
+        )
+    return ProviderSpec(
+        id=ptype,
+        type=ptype,
+        model=ModelSpec(model_id=model_id),
+        api_key=creds.get("api_key"),
+    )
 
 
 class RobustChain(Runnable[RobustChainInput, BaseMessage]):
@@ -112,14 +145,21 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
         model_ids: dict[str, str],
         **kwargs: Any,
     ) -> "RobustChain":
-        """Auto-build ``ProviderSpec`` list from standard env vars + ``model_ids``."""
+        """Auto-build ``ProviderSpec`` list from standard env vars + ``model_ids``.
+
+        For multi-key or multi-region patterns (e.g. two Anthropic keys, or
+        Bedrock east + west), construct the ``ProviderSpec`` list explicitly
+        and pass it to ``RobustChain(providers=[...])``. ``from_env`` covers
+        the simple "one provider per type" path only.
+        """
         _ensure_builtin_adapters_registered()
         providers: list[ProviderSpec] = []
         for ptype, model_id in model_ids.items():
             if ptype in _V02_PLACEHOLDER_TYPES:
+                active_list = ", ".join(sorted(_V01_ACTIVE_TYPES))
                 raise ProviderInactive(
                     f"{ptype} adapter is installed but inactive in v0.1. "
-                    f"Currently active in v0.1: anthropic, openrouter. "
+                    f"Currently active in v0.1: {active_list}. "
                     f"Track v0.2 release for {ptype} support."
                 )
             if ptype not in _V01_ACTIVE_TYPES:
@@ -128,14 +168,7 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
             creds = adapter.credentials_present(os.environ)
             if creds is None:
                 continue
-            providers.append(
-                ProviderSpec(
-                    id=ptype,
-                    type=ptype,
-                    model=ModelSpec(model_id=model_id),
-                    api_key=creds.get("api_key"),
-                )
-            )
+            providers.append(_build_provider_spec(ptype, model_id, creds))
         if not providers:
             raise NoProvidersConfigured(
                 "from_env() found no active providers. Check env vars + model_ids alignment."
