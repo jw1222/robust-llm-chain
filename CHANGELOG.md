@@ -6,10 +6,6 @@
 
 ## [0.3.0] - 2026-04-29
 
-### Fixed — concurrent acall failover skipping providers
-
-`_failover_loop` / `_astream_with_failover` 가 매 retry 마다 `resolver.next()` 를 호출했음 → 글로벌 backend 인덱스가 단조 증가하므로 **두 acall 이 동시에 실행되면 서로의 인덱스를 소비해 한 호출이 같은 provider 를 재시도하면서 다른 provider 는 건너뛸 수 있음** (codex R1 발견, v0.2 부터 잠복). 수정: `ProviderResolver.iterate()` 신설 — 한 acall 당 backend 를 정확히 한 번만 tick 하고, sorted 리스트의 시작 위치를 결정한 뒤 wrap-around 로 모든 provider 를 정확히 한 번씩 반환. chain 의 두 failover 루프가 이를 사용 → "한 호출 안에서 각 provider 를 priority 순으로 정확히 한 번 시도" 의 contract 가 동시성 하에서도 보장됨. `iterate()` 자체에 회귀 테스트 3건 + concurrent `asyncio.gather` 시나리오 포함. `next()` 메서드는 외부 호환을 위해 유지.
-
 ### Changed (BREAKING) — `priority=` semantic 반전 (lower = preferred)
 
 `ProviderResolver` 의 정렬 방향을 descending → ascending 으로 반전. 이제 **낮은 `priority` 값이 먼저 시도** — DNS MX records, cron priority, Linux `nice`, 인프라/큐 분야의 거의 모든 표준 관행과 일치. v0.2.x 의 desc 정렬은 사용자 mental model 과 영구적으로 어긋나는 trap 이라 (`priority=0=primary` 로 주석 달아도 실제 동작은 반대) sub-day-old release 시점에 정정.
@@ -77,6 +73,10 @@ RobustChain.builder().add_bedrock(
 
 ### Removed (post-v0.2.0)
 - `examples/advanced.py` — `examples/builder.py` (v0.2.0) 와 같은 4 시나리오를 explicit `ProviderSpec` list 로 표현했던 예제. v0.2.0 에서 builder 가 권장 path 가 됐고 두 example 의 시나리오가 100% 중복이라 maintenance 부담만 ↑ (한 모델 ID 변경 시 두 file 수정). 사용자 명료성 + DRY 측면에서 builder.py 만 canonical 로 유지. explicit `providers=[ProviderSpec(...)]` path 가 필요한 경우 (config loader / orchestrator) README "Advanced usage" 의 inline 코드 블록이 reference 역할.
+- `ProviderResolver.next()` — production code path 가 모두 `iterate()` 로 이전됐고 (concurrent failover 결함 수정의 결과) test 외 호출자가 0건. 동일 개념의 두 API surface 가 future contributor 에게 footgun ("어느 쪽을 써야 하는가?") 이라 단일화. 4 resolver 단위 테스트도 `iterate()` 기반으로 재작성.
+
+### Fixed — concurrent acall failover skipping providers
+`_failover_loop` / `_astream_with_failover` 가 매 retry 마다 `resolver.next()` 를 호출했음 → 글로벌 backend 인덱스가 단조 증가하므로 **두 acall 이 동시에 실행되면 서로의 인덱스를 소비해 한 호출이 같은 provider 를 재시도하면서 다른 provider 는 건너뛸 수 있음** (codex R1 발견, v0.2 부터 잠복). 수정: `ProviderResolver.iterate()` 신설 — 한 acall 당 backend 를 정확히 한 번만 tick 하고, sorted 리스트의 시작 위치를 결정한 뒤 wrap-around 로 모든 provider 를 정확히 한 번씩 반환. chain 의 두 failover 루프가 이를 사용 → "한 호출 안에서 각 provider 를 priority 순으로 정확히 한 번 시도" 의 contract 가 동시성 하에서도 보장됨. `iterate()` 자체에 회귀 테스트 (priority-sorted rotation 3건 + concurrent `asyncio.gather` 시나리오) + chain-level 3-provider failover end-to-end 테스트 (codex R2 의 coverage gap 보강 — primary fail / secondary succeed / tertiary unattempted) 포함.
 
 ### Future backlog (post-v0.2.0 — Codex / quality round 누적 권고, 모두 의도된 미룸)
 - `to_safe_dict()` helper — `asdict(ChainResult)` footgun 의 안전한 직렬화 경로 (Codex R2/R3/R4 강조).

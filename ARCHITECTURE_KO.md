@@ -147,14 +147,15 @@ chain.{ainvoke|astream|acall}                         진입
 3. asyncio.wait_for(total_timeout)                    total = per_provider × N + 60s, 360s 상한
     │
     ▼
-4. for attempt in range(N):
-       a. spec = await resolver.next()                IndexBackend 통한 라운드 로빈
-       b. model = adapter.build(spec).bind(           호출별 max_tokens / temperature
+4. attempt_order = await resolver.iterate()           한 번의 IndexBackend tick → priority
+                                                      sorted rotation (각 provider 정확히 1회)
+   for spec in attempt_order:
+       a. model = adapter.build(spec).bind(           호출별 max_tokens / temperature
                        max_tokens=..., temperature=...)
-       c. output, usage = await executor.collect(...) Phase 1: first_token 대기
+       b. output, usage = await executor.collect(...) Phase 1: first_token 대기
                                                       Phase 2: chunk pump (per_provider deadline)
                                                       Phase 3: 제한된 aclose() 정리
-       d. 성공 시: break (성공 attempt 기록 + ChainResult 빌드)
+       c. 성공 시: break (성공 attempt 기록 + ChainResult 빌드)
           FallbackEligible (is_fallback_eligible=True) 시:
               AttemptRecord(error_*) 기록 → continue
           FallbackNotApplicable (auth, ModelNotFound, ...) 시:

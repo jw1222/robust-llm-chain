@@ -33,29 +33,18 @@ class ProviderResolver:
         self._backend = backend
         self._key = key
 
-    async def next(self) -> "ProviderSpec":
-        """Return the next provider via ``backend.get_and_increment``.
-
-        Raises:
-            BackendUnavailable: When the backend cannot deliver an index
-                (propagated unwrapped from the backend layer).
-        """
-        idx = await self._backend.get_and_increment(self._key)
-        return self._providers[idx % len(self._providers)]
-
     async def iterate(self) -> "list[ProviderSpec]":
         """Return providers in attempt order for one call (failover sequence).
 
         One backend tick determines the starting point (preserves
         round-robin + worker coordination); the rest of the priority-sorted
         list follows in order, wrapping around. Each provider appears
-        exactly once — this is the failover loop's contract: try every
-        configured provider at most once per call, in priority order
-        starting from the resolver-chosen entrypoint.
+        exactly once — try every configured provider at most once per call,
+        in priority order starting from the resolver-chosen entrypoint.
 
-        Calling ``next()`` inside a per-call retry loop instead would race
-        the global backend index with concurrent calls and could cause one
-        call to retry the same provider while skipping another.
+        One tick per call (not per attempt) keeps concurrent ``acall``
+        invocations from racing the global index — a per-attempt tick could
+        let one call retry the same provider while skipping another.
 
         Raises:
             BackendUnavailable: When the backend cannot deliver an index

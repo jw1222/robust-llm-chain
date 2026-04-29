@@ -82,6 +82,37 @@ def test_acall_first_provider_fails_uses_second():
     asyncio.run(_run())
 
 
+def test_acall_three_providers_secondary_succeeds_tertiary_unattempted():
+    """Regression for R1 ``iterate()`` failover loop: with 3 providers and primary
+    failing eligibly, secondary returns successfully and the tertiary is never built.
+
+    Verifies the new one-tick-per-call contract: attempt order = priority-sorted
+    rotation starting at the resolver-chosen index, each provider tried at most once
+    per call. The tertiary ('p3') must NOT appear in attempts.
+    """
+
+    async def _run():
+        adapter = _setup()
+        adapter.set_response("p1", exception=ProviderOverloaded("529 overloaded"))
+        adapter.set_response("p2", text="secondary served")
+        adapter.set_response("p3", text="should not be reached")
+        chain = RobustChain(
+            providers=[_fake_spec("p1"), _fake_spec("p2"), _fake_spec("p3")],
+        )
+
+        result = await chain.acall("hi")
+
+        assert result.output.content == "secondary served"
+        assert result.provider_used.id == "p2"
+        assert len(result.attempts) == 2  # tertiary never attempted
+        assert [a.provider_id for a in result.attempts] == ["p1", "p2"]
+        assert result.attempts[0].error_type == "ProviderOverloaded"
+        assert result.attempts[0].fallback_eligible is True
+        assert result.attempts[1].error_type is None
+
+    asyncio.run(_run())
+
+
 def test_acall_all_providers_fail_raises_all_failed():
     async def _run():
         adapter = _setup()

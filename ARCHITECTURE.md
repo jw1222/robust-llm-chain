@@ -145,14 +145,15 @@ chain.{ainvoke|astream|acall}                         entry
 3. asyncio.wait_for(total_timeout)                    total = per_provider × N + 60s, cap 360s
     │
     ▼
-4. for attempt in range(N):
-       a. spec = await resolver.next()                round-robin via IndexBackend
-       b. model = adapter.build(spec).bind(           per-call max_tokens / temperature
+4. attempt_order = await resolver.iterate()           one IndexBackend tick → priority-sorted
+                                                      rotation (each provider exactly once)
+   for spec in attempt_order:
+       a. model = adapter.build(spec).bind(           per-call max_tokens / temperature
                        max_tokens=..., temperature=...)
-       c. output, usage = await executor.collect(...) Phase 1: first_token wait
+       b. output, usage = await executor.collect(...) Phase 1: first_token wait
                                                       Phase 2: chunk pump (per_provider deadline)
                                                       Phase 3: bounded aclose() cleanup
-       d. on success: break (record success attempt + build ChainResult)
+       c. on success: break (record success attempt + build ChainResult)
           on FallbackEligible (is_fallback_eligible=True):
               record AttemptRecord(error_*) → continue
           on FallbackNotApplicable (auth, ModelNotFound, ...):
