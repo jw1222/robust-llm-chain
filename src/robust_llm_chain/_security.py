@@ -6,8 +6,6 @@ prevent accidental key exposure in logs / repr / exception messages.
 Not part of the public API.
 """
 
-from __future__ import annotations
-
 import re
 from typing import Final
 

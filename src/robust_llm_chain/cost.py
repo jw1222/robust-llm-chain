@@ -14,8 +14,6 @@ Cache rate defaults (when ``PricingSpec.cache_read_per_1m`` /
 ``input_per_1m * 1.25`` (write) — Anthropic-style approximation.
 """
 
-from __future__ import annotations
-
 from typing import Final
 
 from robust_llm_chain.types import CostEstimate, ModelSpec, TokenUsage

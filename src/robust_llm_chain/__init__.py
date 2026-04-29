@@ -6,6 +6,7 @@ versioned contract. Anything imported via subpaths (``robust_llm_chain.errors``,
 but the package root re-exports the day-to-day essentials.
 """
 
+from robust_llm_chain.builder import RobustChainBuilder, SingleKeyProviderType
 from robust_llm_chain.chain import RobustChain
 from robust_llm_chain.types import (
     AttemptRecord,
@@ -29,7 +30,9 @@ __all__ = [
     "PricingSpec",
     "ProviderSpec",
     "RobustChain",
+    "RobustChainBuilder",
     "RobustChainInput",
+    "SingleKeyProviderType",
     "TimeoutConfig",
     "TokenUsage",
     "__version__",

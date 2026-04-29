@@ -16,7 +16,9 @@ import robust_llm_chain
 
 _EXPECTED_ROOT_EXPORTS = {
     "RobustChain",
+    "RobustChainBuilder",
     "RobustChainInput",
+    "SingleKeyProviderType",
     "ProviderSpec",
     "ModelSpec",
     "PricingSpec",
@@ -54,6 +56,19 @@ def test_robust_chain_input_alias_importable_from_root():
 
     # PEP 695 type alias has __value__ attribute.
     assert hasattr(RobustChainInput, "__value__")
+
+
+def test_builder_symbols_importable_from_root():
+    """``RobustChainBuilder`` + ``SingleKeyProviderType`` are root-level public API."""
+    from robust_llm_chain import RobustChain, RobustChainBuilder, SingleKeyProviderType
+
+    # Builder is the recommended configuration path; classmethod on RobustChain
+    # returns an instance.
+    assert isinstance(RobustChain.builder(), RobustChainBuilder)
+    # Literal alias narrows the ``add_provider(type=...)`` argument.
+    from typing import get_args
+
+    assert set(get_args(SingleKeyProviderType)) == {"anthropic", "openai", "openrouter"}
 
 
 def test_dataclasses_importable_from_root():

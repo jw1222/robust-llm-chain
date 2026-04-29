@@ -8,8 +8,6 @@ the builder does not touch ``os.environ``. See README "Provider
 configuration" + ``examples/builder.py`` for full patterns.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any, Literal, Self, get_args
 
 from robust_llm_chain.types import ModelSpec, ProviderSpec
@@ -95,7 +93,7 @@ class RobustChainBuilder:
 
     # ── terminal ────────────────────────────────────────────────────────────
 
-    def build(self, **kwargs: Any) -> RobustChain:
+    def build(self, **kwargs: Any) -> "RobustChain":
         """Construct the ``RobustChain``. ``kwargs`` forward to ``RobustChain.__init__``.
 
         Raises ``NoProvidersConfigured`` (via ``RobustChain.__init__``) when

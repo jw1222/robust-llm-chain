@@ -75,6 +75,12 @@ RobustChain.builder().add_bedrock(
 - `examples/advanced.py` — `examples/builder.py` (v0.2.0) 와 같은 4 시나리오를 explicit `ProviderSpec` list 로 표현했던 예제. v0.2.0 에서 builder 가 권장 path 가 됐고 두 example 의 시나리오가 100% 중복이라 maintenance 부담만 ↑ (한 모델 ID 변경 시 두 file 수정). 사용자 명료성 + DRY 측면에서 builder.py 만 canonical 로 유지. explicit `providers=[ProviderSpec(...)]` path 가 필요한 경우 (config loader / orchestrator) README "Advanced usage" 의 inline 코드 블록이 reference 역할.
 - `ProviderResolver.next()` — production code path 가 모두 `iterate()` 로 이전됐고 (concurrent failover 결함 수정의 결과) test 외 호출자가 0건. 동일 개념의 두 API surface 가 future contributor 에게 footgun ("어느 쪽을 써야 하는가?") 이라 단일화. 4 resolver 단위 테스트도 `iterate()` 기반으로 재작성.
 
+### Added (post-R3 — CODING_STYLE compliance audit)
+- `RobustChainBuilder` + `SingleKeyProviderType` 가 패키지 root 에서 import 가능 (`from robust_llm_chain import RobustChainBuilder, SingleKeyProviderType`). v0.3.0 의 BREAKING 자체가 builder API 중심인데 `from robust_llm_chain.builder import ...` 만 가능했음 (CODING_STYLE §12 위반). `ARCHITECTURE.md` §6.1 표 + `tests/test_public_api.py` 회귀 테스트도 함께 갱신.
+
+### Style — `from __future__ import annotations` 제거 (CODING_STYLE §16 금지 항목)
+- `src/robust_llm_chain/builder.py` (v0.3 신규 도입), `_security.py`, `cost.py` (사전부터 잠복) 의 `from __future__ import annotations` 제거. Python 3.13+ 는 PEP 695 alias / quoted forward ref 로 해결되므로 이 import 가 dead code 였음. `builder.py` 의 `RobustChain` 반환 타입은 quote (`"RobustChain"`) 로 처리.
+
 ### Fixed — concurrent acall failover skipping providers
 `_failover_loop` / `_astream_with_failover` 가 매 retry 마다 `resolver.next()` 를 호출했음 → 글로벌 backend 인덱스가 단조 증가하므로 **두 acall 이 동시에 실행되면 서로의 인덱스를 소비해 한 호출이 같은 provider 를 재시도하면서 다른 provider 는 건너뛸 수 있음** (codex R1 발견, v0.2 부터 잠복). 수정: `ProviderResolver.iterate()` 신설 — 한 acall 당 backend 를 정확히 한 번만 tick 하고, sorted 리스트의 시작 위치를 결정한 뒤 wrap-around 로 모든 provider 를 정확히 한 번씩 반환. chain 의 두 failover 루프가 이를 사용 → "한 호출 안에서 각 provider 를 priority 순으로 정확히 한 번 시도" 의 contract 가 동시성 하에서도 보장됨. `iterate()` 자체에 회귀 테스트 (priority-sorted rotation 3건 + concurrent `asyncio.gather` 시나리오) + chain-level 3-provider failover end-to-end 테스트 (codex R2 의 coverage gap 보강 — primary fail / secondary succeed / tertiary unattempted) 포함.
 

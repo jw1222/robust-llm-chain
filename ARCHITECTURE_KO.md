@@ -357,6 +357,7 @@ streaming exception E
 | Symbol | Source |
 |---|---|
 | `RobustChain` | `chain.py` |
+| `RobustChainBuilder`, `SingleKeyProviderType` | `builder.py` |
 | `RobustChainInput` | `types.py` |
 | `ProviderSpec`, `ModelSpec`, `PricingSpec` | `types.py` |
 | `TokenUsage`, `CostEstimate` | `types.py` |
