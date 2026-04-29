@@ -48,41 +48,31 @@ Set two environment variables (`ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`), then:
 
 ```python
 import asyncio
-import os
-from robust_llm_chain import RobustChain, ProviderSpec, ModelSpec
+from robust_llm_chain import RobustChain
 
-chain = RobustChain(providers=[
-    ProviderSpec(
-        id="anthropic-direct",                                    # your label
-        type="anthropic",                                         # adapter
-        model=ModelSpec(model_id="claude-haiku-4-5-20251001"),    # vendor's model id
-        api_key=os.environ["ANTHROPIC_API_KEY"],
-        priority=0,                                               # primary
-    ),
-    ProviderSpec(
-        id="openrouter-claude",
-        type="openrouter",
-        model=ModelSpec(model_id="anthropic/claude-haiku-4.5"),
-        api_key=os.environ["OPENROUTER_API_KEY"],
-        priority=1,                                               # fallback
-    ),
-])
+chain = (
+    RobustChain.builder()
+    .add_anthropic(model="claude-haiku-4-5-20251001", priority=0)        # primary
+    .add_openrouter(model="anthropic/claude-haiku-4.5", priority=1)      # fallback
+    .build()
+)
 # acall: convenience method that returns a ChainResult with operational metadata
 result = asyncio.run(chain.acall("두 줄로 자기소개 해줘."))
-print(result.output.content)                                # BaseMessage.content
-print(f"used: {result.provider_used.id} | tokens: {result.usage}")  # metadata
+print(result.output.content)                                       # BaseMessage.content
+print(f"used: {result.provider_used.id} | tokens: {result.usage}") # metadata
 ```
 
 > The standard Runnable `ainvoke()` returns just a `BaseMessage` (for LangChain composition). To get `attempts`, `cost`, and `usage` in one call, use `acall()` or read `chain.last_result`.
 
 **What happens:**
-- Two providers configured: Anthropic Direct (primary, `priority=0`) and OpenRouter as fallback (`priority=1`).
+- Two providers configured via the fluent builder: Anthropic Direct (primary, `priority=0`) and OpenRouter as fallback (`priority=1`).
+- `add_anthropic(...)` reads `ANTHROPIC_API_KEY` from env by default; `add_openrouter(...)` reads `OPENROUTER_API_KEY`. Pass `env_var="..."` to use a different env var, or `api_key="..."` to bypass env lookup entirely.
 - If Anthropic returns 529 / overloaded / pending, the request transparently fails over to OpenRouter. No additional configuration.
-- Distinct `id` (your label) and `model.model_id` (the vendor's identifier) so each role is unambiguous — even when OpenRouter's `vendor/model` format starts with `anthropic/...`.
+- Missing env var → immediate `KeyError` with the exact var name (fail-fast, not silent skip).
 
-**Defaults:** single-worker / `pricing=None` / `backend=LocalBackend()`. For multi-worker round-robin, cost computation, or multi-key / multi-region patterns, see [Advanced usage](#advanced-usage) below.
+**Defaults:** single-worker / `pricing=None` / `backend=LocalBackend()`. For multi-worker round-robin, cost computation, or multi-key / multi-region patterns, see [Provider configuration](#provider-configuration--three-paths) and [Advanced usage](#advanced-usage) below.
 
-> **Shortcut for the simple "one provider per type" case:** `RobustChain.from_env(model_ids={"anthropic": "...", "openrouter": "..."})` auto-builds the same `ProviderSpec` list from env vars. Note the dict key is the **provider type** (adapter), and the value is the **vendor's model id** — these can look the same string when an OpenRouter model id starts with `anthropic/...`. Use the explicit form above when clarity matters.
+> **Three configuration paths** are available — `from_env` (env-driven dict, single-per-type), **`builder`** (fluent, multi-key OK, fail-fast — used here), and explicit `providers=[ProviderSpec(...)]` list. See the comparison matrix in [Provider configuration](#provider-configuration--three-paths).
 
 ---
 
@@ -213,30 +203,31 @@ The library does **not** depend on `python-dotenv`. Loading `.env` files is up t
 
 ---
 
-## Provider configuration — two paths
+## Provider configuration — three paths
 
-There are **two ways** to tell `RobustChain` which providers to use. They differ in **what they can express**, not just style:
+There are **three ways** to tell `RobustChain` which providers to use. They differ in **what they can express** and how concise the call site is:
 
-| Capability | `RobustChain.from_env(model_ids={...})` | `RobustChain(providers=[ProviderSpec(...)])` |
-|---|---|---|
-| Source of credentials | env vars (auto-read) | explicit `api_key=...` (or `None` → SDK env fallback) |
-| Source of model_id | dict value | `ModelSpec(model_id=...)` field |
-| One provider per type (e.g. one Anthropic + one OpenAI) | ✅ | ✅ |
-| **Multiple keys for the same type** (e.g. `anthropic1` + `anthropic2` for rate-limit headroom) | ❌ — dict key is unique | ✅ — same `type`, distinct `id` |
-| **Multi-region** (Bedrock east + west) | ❌ — single `AWS_REGION` env | ✅ — explicit per-spec `region` |
-| **Different model_ids on the same type** | ❌ — dict key is unique | ✅ — different `model.model_id` per spec |
-| **Per-spec `priority` ordering** | ❌ — uniform default `0` | ✅ — explicit ordering primary→fallback |
-| Missing API_KEY for a configured type | silent skip → that provider is dropped, others still build | n/a (you supplied the key explicitly) |
-| Mental model | 12-factor / env-driven | code-as-config |
-| **Use when** | Dev, single-vendor-per-type production, env-driven deploys | Multi-key, multi-region, cross-vendor, per-spec tuning, anything operational |
+| Capability | `RobustChain.from_env(model_ids={...})` | **`RobustChain.builder().add_*(...).build()`** | `RobustChain(providers=[ProviderSpec(...)])` |
+|---|---|---|---|
+| Source of credentials | env vars (auto-read, dict key = type) | env var per `add_*` (configurable) **or** explicit `api_key=...` | explicit `api_key=...` (or `None` → SDK env fallback) |
+| Source of model_id | dict value | `model="..."` keyword arg | `ModelSpec(model_id=...)` field |
+| One provider per type | ✅ | ✅ | ✅ |
+| **Multiple keys for the same type** (e.g. `anthropic-1` + `anthropic-2` for rate-limit headroom) | ❌ — dict key is unique | ✅ — call `add_anthropic(...)` twice with distinct `env_var=` / `id=` | ✅ — same `type`, distinct `id` |
+| **Multi-region** (Bedrock east + west) | ❌ — single `AWS_REGION` env | ✅ — explicit `region=` per `add_bedrock(...)` | ✅ — explicit per-spec `region` |
+| **Different model_ids on the same type** | ❌ — dict key is unique | ✅ — different `model=` per call | ✅ — different `model.model_id` per spec |
+| **Per-spec `priority` ordering** | ❌ — uniform default `0` | ✅ — `priority=` keyword | ✅ — explicit ordering primary→fallback |
+| Missing API_KEY behavior | silent skip → that provider is dropped, others still build | **fail-fast** — `KeyError` with the exact env var name | n/a (you supplied the key explicitly) |
+| Verbosity (3 providers, ~lines) | 3 lines (one dict) | 5 lines (one chained call) | 15 lines (one `ProviderSpec(...)` per provider) |
+| Mental model | 12-factor / env-driven | fluent + env-driven, fail-fast | code-as-config |
+| **Use when** | Dev, single-vendor-per-type production, env-driven deploys | **Most production use cases — multi-key / multi-region / cross-vendor with env-friendly defaults** | When you already have `ProviderSpec` instances from elsewhere (config loader, orchestrator, etc.) |
 
 ### Quick decision tree
 
-- "Just want one Claude + one OpenAI from env vars" → `from_env`. Done.
-- "Need two Anthropic keys" / "Bedrock east + west" / "Claude → GPT cross-vendor fallback" / "primary-then-backup priority" → **explicit `providers=[ProviderSpec(...)]`**. See [`examples/advanced.py`](examples/advanced.py).
-- Not sure → start with explicit `providers=[...]`. It's a few more lines but never surprises you.
+- "Just want one Claude + one OpenAI from env vars, simplest possible" → `from_env`. Done.
+- **"Need multi-key / multi-region / cross-vendor / explicit priority — but env-friendly"** → **`RobustChain.builder()`** (recommended for most production). See [`examples/builder.py`](examples/builder.py).
+- "Already constructing `ProviderSpec` instances elsewhere in code" → explicit `providers=[...]` list. See [`examples/advanced.py`](examples/advanced.py).
 
-> **Caveat — `from_env` silent skip:** if a type is in `model_ids` but its env var is missing, that provider is silently skipped. This is intentional (12-factor convention — "activate what's available") but means a typo'd env var name can produce a `NoProvidersConfigured` error with no hint at the cause. The explicit `providers=[...]` path doesn't have this trap. (Roadmap: a fluent builder API in v0.2 — see [CHANGELOG `[Unreleased]`](CHANGELOG.md) — will collapse the two paths into one.)
+> **Builder vs `from_env` silent-skip:** the builder raises `KeyError` with the exact missing env var name when a credential isn't found, instead of silently dropping the provider. That trades 12-factor convenience for explicitness — usually what you want once you're past dev.
 
 ### Recognized environment variables (for `from_env`)
 

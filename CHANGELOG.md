@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Added (post-v0.1.0 GitHub release)
+- **`RobustChain.builder()` — fluent provider configuration (third path)** — `RobustChain.builder().add_anthropic(model="...").add_openrouter(model="...").build()` 패턴. 두 기존 path (`from_env` dict-based / `providers=[...]` list-based) 의 capability split (multi-key / multi-region 표현) 을 동일 chained API 로 합치는 중간 layer. additive — 기존 path 모두 유지. credential resolution 은 `add_*` 별 default `env_var` (configurable) **또는** explicit `api_key=` (env 없어도 OK), 누락 시 `KeyError` fail-fast (silent skip 아님 — `from_env` 의 함정 반대). auto-id (`anthropic-1` / `anthropic-2`) 로 multi-key 자동 unique. `src/robust_llm_chain/builder.py` 신규 모듈, `RobustChain.builder()` classmethod, +13 RED→GREEN 단위 테스트. **사용자 dogfooding 발견 (두 path 헷갈림 → 즉시 구현)**. README "Quickstart" 도 builder 패턴으로 변경 (가장 간결). README "Provider configuration: three paths" 섹션 + decision tree 갱신.
+- **`examples/builder.py`** — runnable scripts for 4 production patterns via builder API (`multikey` / `3way` / `xvendor` / `multiregion`). `examples/advanced.py` (explicit ProviderSpec list) 와 동일 시나리오, builder 로 표현.
+- **`examples/quickstart.py` 갱신** — README quickstart 와 byte-identical: builder 패턴으로 변경 (이전: explicit ProviderSpec list).
 - **`examples/advanced.py`** — runnable scripts for 4 production patterns: `multikey` (두 Anthropic 키 round-robin), `3way` (Anthropic + Bedrock + OpenRouter 3-way Claude failover), `xvendor` (Claude → GPT cross-vendor cross-model), `multiregion` (Bedrock east + west). README "Advanced usage" 섹션이 이제 코드 + 실행 가능한 example 모두 가리킴. v0.1.0 GitHub release 후 사용자 질문 ("multi-key 샘플은?" + "model id 는 사용자가 넣는가?" → yes, 의도된 디자인) 반영.
 
 ### Changed (post-v0.1.0 GitHub release)
@@ -14,7 +17,7 @@
 
 
 ### v0.2 backlog (Codex / quality round 누적 권고, 모두 의도된 미룸)
-- **Fluent builder API** — `RobustChain.builder().add_anthropic(env_var="ANTHROPIC_API_KEY", model="...").add_openrouter(...).build()` 패턴. 현재 `from_env(model_ids={...})` (dict-based, single-per-type 제약) vs `RobustChain(providers=[ProviderSpec(...)])` (list-based, full power) 두 path 의 capability 차이가 사용자 mental model 측면에서 confusing 하다는 catch (사용자 dogfooding 발견). Builder 가 single + multi-key + multi-region 모두 동일 API 로 표현 가능 — 두 path 합치는 중간 layer. additive (기존 path 모두 유지). v0.2 minor.
+- ~~**Fluent builder API**~~ → **v0.2.0 에서 구현 완료** (위 Added 섹션 참조).
 - `to_safe_dict()` helper — `asdict(ChainResult)` footgun 의 안전한 직렬화 경로 (Codex R2/R3/R4 강조).
 - 명시적 `__copy__` / `__deepcopy__` — 현 `__getstate__` 동작 (credential drop) 으로 안전하나 SECURITY.md §1 명시만으로 충분.
 - `_KEY_PATTERNS` 에 LangSmith service token / AWS STS / 추가 prefix 보강 (현재 best-effort qualifier 명시).

@@ -13,7 +13,10 @@ import logging
 import os
 import time
 from collections.abc import AsyncIterator
-from typing import Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
+
+if TYPE_CHECKING:
+    from robust_llm_chain.builder import RobustChainBuilder
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, BaseMessageChunk, HumanMessage
@@ -146,6 +149,23 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
         self._totals_lock = asyncio.Lock()
 
     # ── factory ─────────────────────────────────────────────────────────────
+
+    @classmethod
+    def builder(cls) -> "RobustChainBuilder":
+        """Return a fluent builder. See ``robust_llm_chain.builder`` for usage.
+
+        Example::
+
+            chain = (
+                RobustChain.builder()
+                .add_anthropic(model="claude-haiku-4-5-20251001")
+                .add_openrouter(model="anthropic/claude-haiku-4.5")
+                .build()
+            )
+        """
+        from robust_llm_chain.builder import RobustChainBuilder
+
+        return RobustChainBuilder()
 
     @classmethod
     def from_env(

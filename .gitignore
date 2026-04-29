@@ -71,10 +71,12 @@ dmypy.json
 # ──────────────────────────────────────────────────────────────────────────────
 # 개인 메모 (gitignored — 사고 commit 방지)
 # BOOTSTRAP-PROMPT 명시: docs/start/PRIVATE_NOTES.md 는 절대 commit 금지
-# CLAUDE.md 는 Claude Code 세션 로컬 가이드 — public repo 노출 금지
+# CLAUDE.md / AGENTS.md / GEMINI.md 는 로컬 agent 가이드 — public repo 노출 금지
 # ──────────────────────────────────────────────────────────────────────────────
 docs/start/PRIVATE_NOTES.md
 CLAUDE.md
+AGENTS.md
+GEMINI.md
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Internal design docs — kept local, not pushed to public repo
