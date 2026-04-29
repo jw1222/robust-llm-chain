@@ -11,7 +11,7 @@ from typing import ClassVar, Final
 from langchain_core.language_models.chat_models import BaseChatModel
 from pydantic import SecretStr
 
-from robust_llm_chain.adapters import DEFAULT_MAX_OUTPUT_TOKENS
+from robust_llm_chain.adapters import DEFAULT_MAX_OUTPUT_TOKENS, env_api_key_credentials
 from robust_llm_chain.errors import ProviderInactive
 from robust_llm_chain.types import ProviderSpec
 
@@ -50,7 +50,4 @@ class OpenRouterAdapter:
 
     def credentials_present(self, env: Mapping[str, str]) -> dict[str, str] | None:
         """Return ``{"api_key": ...}`` if ``OPENROUTER_API_KEY`` is set, else ``None``."""
-        api_key = env.get("OPENROUTER_API_KEY")
-        if api_key is None:
-            return None
-        return {"api_key": api_key}
+        return env_api_key_credentials(env, "OPENROUTER_API_KEY")

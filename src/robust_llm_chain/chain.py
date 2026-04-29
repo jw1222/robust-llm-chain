@@ -28,6 +28,7 @@ from robust_llm_chain.adapters.bedrock import BedrockAdapter
 from robust_llm_chain.adapters.openai import OpenAIAdapter
 from robust_llm_chain.adapters.openrouter import OpenRouterAdapter
 from robust_llm_chain.backends import IndexBackend, LocalBackend
+from robust_llm_chain.cost import compute_cost
 from robust_llm_chain.errors import (
     AllProvidersFailed,
     NoProvidersConfigured,
@@ -331,35 +332,6 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
             run_id=None,
         )
 
-    def _compute_cost(self, model_spec: ModelSpec, usage: TokenUsage) -> CostEstimate | None:
-        pricing = model_spec.pricing
-        if pricing is None:
-            return None
-        cache_read_rate = (
-            pricing.cache_read_per_1m
-            if pricing.cache_read_per_1m is not None
-            else pricing.input_per_1m * 0.1
-        )
-        cache_write_rate = (
-            pricing.cache_write_per_1m
-            if pricing.cache_write_per_1m is not None
-            else pricing.input_per_1m * 1.25
-        )
-        scale = 1_000_000.0
-        input_cost = usage.input_tokens * pricing.input_per_1m / scale
-        output_cost = usage.output_tokens * pricing.output_per_1m / scale
-        cache_read_cost = usage.cache_read_tokens * cache_read_rate / scale
-        cache_write_cost = usage.cache_write_tokens * cache_write_rate / scale
-        total = input_cost + output_cost + cache_read_cost + cache_write_cost
-        return CostEstimate(
-            input_cost=input_cost,
-            output_cost=output_cost,
-            cache_read_cost=cache_read_cost,
-            cache_write_cost=cache_write_cost,
-            total_cost=total,
-            currency=pricing.currency,
-        )
-
     async def _update_totals(self, result: ChainResult) -> None:
         async with self._totals_lock:
             self._total_usage += result.usage
@@ -431,7 +403,7 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
                 input=messages,
                 output=output,
                 usage=usage,
-                cost=self._compute_cost(spec.model, usage),
+                cost=compute_cost(spec.model, usage),
                 provider_used=spec,
                 model_used=spec.model,
                 attempts=attempts,
@@ -557,5 +529,5 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
         attempts.append(self._record_attempt(spec, "stream", attempt_start, None, False))
         result.output = accumulated
         result.usage = usage
-        result.cost = self._compute_cost(spec.model, usage)
+        result.cost = compute_cost(spec.model, usage)
         result.elapsed_ms = (time.monotonic() - start) * 1000

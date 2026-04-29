@@ -63,4 +63,25 @@ def get_adapter(type_: str) -> ProviderAdapter:
     return _ADAPTER_REGISTRY[type_]
 
 
-__all__ = ["DEFAULT_MAX_OUTPUT_TOKENS", "ProviderAdapter", "get_adapter", "register_adapter"]
+def env_api_key_credentials(env: Mapping[str, str], env_var: str) -> dict[str, str] | None:
+    """Detect a single ``api_key``-style credential from ``env``.
+
+    Helper for adapters whose ``credentials_present`` is just "look up one env
+    var, return ``{'api_key': ...}`` when set". Used by the three single-key
+    built-in adapters (``anthropic``, ``openrouter``, ``openai``) — Bedrock has
+    its own multi-field detector. Custom adapters with the same shape may use
+    this directly (CODING_STYLE §1.7 — 3-strike DRY).
+    """
+    api_key = env.get(env_var)
+    if api_key is None:
+        return None
+    return {"api_key": api_key}
+
+
+__all__ = [
+    "DEFAULT_MAX_OUTPUT_TOKENS",
+    "ProviderAdapter",
+    "env_api_key_credentials",
+    "get_adapter",
+    "register_adapter",
+]
