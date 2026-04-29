@@ -109,9 +109,7 @@ class MemcachedBackend:
                 if seeded:
                     return 0
                 # Lost the race; another worker seeded. Retry incr.
-                new_val = await asyncio.wait_for(
-                    self._client.incr(full_key, 1), timeout=timeout
-                )
+                new_val = await asyncio.wait_for(self._client.incr(full_key, 1), timeout=timeout)
                 if new_val is None:
                     raise BackendUnavailable(
                         "memcached counter neither exists after seed nor accepts incr"
