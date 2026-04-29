@@ -30,6 +30,13 @@
 - **`SECURITY.md §1` 의 `repr(result)` 권장 정정**: 이전 문구가 "use `repr(spec)` / `repr(result)`" 였으나 `ChainResult` 는 default dataclass repr 라 `input` (prompt) / `output` (response) 평문 노출 — hardening #3 ("library never logs prompt/response") 와 모순. `repr(spec)` 만 안전하다는 명확화 + 사용자가 ChainResult 를 직렬화할 때 명시적 필드 추출 (provider id / elapsed_ms / usage / attempts) 권장으로 수정. Codex Round 4 발견.
 - **`pyproject.toml` sdist `.gitignore` 제외 시도 (v0.2 미룸)**: hatchling 기본 동작이 sdist 에 `.gitignore` 를 자동 포함하며 표준 `exclude` 옵션으로 차단되지 않음 (Round 4 검증). `.gitignore` 가 노출하는 정보는 일반 glob + 사적 파일명 1개 (`docs/start/PRIVATE_NOTES.md`) 로 minor information leak. v0.2 에서 `force-exclude` 또는 hatch plugin 으로 처리. pyproject.toml 에 NOTE 주석 추가. Codex Round 4 발견 L3.
 
+### Refactor / Quality (v0.1.0 ship 직전 micro-refactoring)
+- **DRY — `_accumulate_usage` 중복 제거**: chain.py 와 stream.py 양쪽에 12줄 동일 함수가 정의되어 있어 chain.py 가 stream._accumulate_usage 를 import 하도록 통합 (CODING_STYLE §1.7 — 의미 동일성 강한 결합).
+- **DRY — `DEFAULT_MAX_OUTPUT_TOKENS` 4중복 제거**: 4개 어댑터 (anthropic / openrouter / openai / bedrock) 각각에 동일 상수 `_DEFAULT_MAX_OUTPUT_TOKENS = 4096` 가 있던 것을 `adapters/__init__.py` 에 public `DEFAULT_MAX_OUTPUT_TOKENS` 로 승격. `__all__` 에 등록 (단일 편집점, 4-strike DRY 명확).
+- **DRY — `_ensure_builtin_adapters_registered` 단순화**: chain.py 의 4중 `if X not in registry: register_adapter(X())` 패턴을 `_BUILTIN_ADAPTERS` tuple + loop 로 단순화.
+- **`pyproject.toml` `redis` placeholder extra 제거**: PyPI 사용자에게 `pip install robust-llm-chain[redis]` 가 보이지만 실제로 redis 백엔드 코드는 v0.2 까지 미구현 — placeholder 가 misleading 이라 제거. `_V02_PLACEHOLDER_TYPES` 의 `ProviderInactive` 메시지도 "installed but inactive" → "reserved for v0.2" 로 정정. Codex Round (quality) 발견.
+- **`from_env` unknown provider type 시 WARN log**: 이전엔 typo (`antrophic`) 같은 unknown type 을 silent skip 하다가 모든 provider 가 빠지면 `NoProvidersConfigured` raise — 사용자가 원인 모름. `robust_llm_chain.chain` 모듈 logger 에 WARN 출력 (active types 명시 + "Possible typo?") 으로 관찰성 강화. RED→GREEN 회귀 테스트 추가. Codex Round (quality) 발견.
+
 ### Documentation
 - **`ARCHITECTURE.md` 를 project root 로 승격** — 외부 contributor 친화적. 모듈 구조 / 의존 그래프 / 호출 lifecycle / 데이터 모델 / 에러 흐름 / public surface / 확장점 (custom ProviderAdapter / IndexBackend / fail-closed semantics) 정리. README 의 새 "Architecture" 섹션에서 링크. `pyproject.toml [tool.hatch.build.targets.sdist]` 에 포함되어 PyPI sdist 와 함께 배포.
 - **OSS 표준 문서 정리**: CONTRIBUTING / SECURITY / CODE_OF_CONDUCT (root) + `.github/ISSUE_TEMPLATE/` (bug_report + feature_request) + `.github/PULL_REQUEST_TEMPLATE.md` 추가. contributor 친화적 표준 갖춤.

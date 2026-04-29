@@ -16,16 +16,14 @@ chain (env, IAM role, ``~/.aws/credentials``) applies.
 """
 
 from collections.abc import Mapping
-from typing import ClassVar, Final
+from typing import ClassVar
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from pydantic import SecretStr
 
+from robust_llm_chain.adapters import DEFAULT_MAX_OUTPUT_TOKENS
 from robust_llm_chain.errors import ProviderInactive
 from robust_llm_chain.types import ProviderSpec
-
-#: Library default when ``ModelSpec.max_output_tokens`` is unset.
-_DEFAULT_MAX_OUTPUT_TOKENS: Final[int] = 4096
 
 
 class BedrockAdapter:
@@ -51,7 +49,7 @@ class BedrockAdapter:
                 'bedrock adapter requires `pip install "robust-llm-chain[bedrock]"`'
             ) from e
 
-        max_tokens = spec.model.max_output_tokens or _DEFAULT_MAX_OUTPUT_TOKENS
+        max_tokens = spec.model.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS
         # Build kwargs incrementally so unset credentials defer to boto3's
         # default credential chain (env / IAM role / ~/.aws/credentials).
         kwargs: dict[str, object] = {

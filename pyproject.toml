@@ -33,8 +33,6 @@ openrouter = ["langchain-openai>=0.2"]
 openai = ["langchain-openai>=0.2"]
 bedrock = ["langchain-aws>=0.2"]
 memcached = ["aiomcache>=0.8"]
-# Placeholder extras (활성: v0.2)
-redis = ["redis>=5.0"]
 all = [
     "langchain-anthropic>=0.2",
     "langchain-openai>=0.2",

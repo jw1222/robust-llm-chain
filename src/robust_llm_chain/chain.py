@@ -37,7 +37,7 @@ from robust_llm_chain.errors import (
     is_fallback_eligible,
 )
 from robust_llm_chain.resolver import ProviderResolver
-from robust_llm_chain.stream import StreamExecutor
+from robust_llm_chain.stream import StreamExecutor, _accumulate_usage
 from robust_llm_chain.types import (
     AttemptRecord,
     ChainResult,
@@ -48,6 +48,10 @@ from robust_llm_chain.types import (
     TimeoutConfig,
     TokenUsage,
 )
+
+#: Module-level logger for ``RobustChain.from_env`` and other classmethod paths
+#: where the per-instance ``self._logger`` is not yet available.
+_module_logger = logging.getLogger("robust_llm_chain.chain")
 
 # Per-call ChainResult isolation. ``contextvars`` survive task hops, so
 # concurrent ``asyncio.gather(chain.acall(...), chain.acall(...))`` calls do
@@ -68,16 +72,19 @@ _TOTAL_TIMEOUT_BUFFER_SEC: float = 60.0
 _TOTAL_TIMEOUT_CAP_SEC: float = 360.0
 
 
+_BUILTIN_ADAPTERS: tuple[type, ...] = (
+    AnthropicAdapter,
+    OpenRouterAdapter,
+    OpenAIAdapter,
+    BedrockAdapter,
+)
+
+
 def _ensure_builtin_adapters_registered() -> None:
     """Register the four built-in adapters once per registry snapshot."""
-    if "anthropic" not in _ADAPTER_REGISTRY:
-        register_adapter(AnthropicAdapter())
-    if "openrouter" not in _ADAPTER_REGISTRY:
-        register_adapter(OpenRouterAdapter())
-    if "openai" not in _ADAPTER_REGISTRY:
-        register_adapter(OpenAIAdapter())
-    if "bedrock" not in _ADAPTER_REGISTRY:
-        register_adapter(BedrockAdapter())
+    for adapter_cls in _BUILTIN_ADAPTERS:
+        if adapter_cls.type not in _ADAPTER_REGISTRY:  # type: ignore[attr-defined]
+            register_adapter(adapter_cls())
 
 
 def _build_provider_spec(ptype: str, model_id: str, creds: dict[str, str]) -> ProviderSpec:
@@ -158,11 +165,17 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
             if ptype in _V02_PLACEHOLDER_TYPES:
                 active_list = ", ".join(sorted(_V01_ACTIVE_TYPES))
                 raise ProviderInactive(
-                    f"{ptype} adapter is installed but inactive in v0.1. "
-                    f"Currently active in v0.1: {active_list}. "
+                    f"{ptype} is reserved for v0.2 and not available in v0.1. "
+                    f"Currently active provider types: {active_list}. "
                     f"Track v0.2 release for {ptype} support."
                 )
             if ptype not in _V01_ACTIVE_TYPES:
+                _module_logger.warning(
+                    "from_env: unknown provider type %r — skipping. "
+                    "Active types: %s. Possible typo?",
+                    ptype,
+                    sorted(_V01_ACTIVE_TYPES),
+                )
                 continue
             adapter = get_adapter(ptype)
             creds = adapter.credentials_present(os.environ)
@@ -546,17 +559,3 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
         result.usage = usage
         result.cost = self._compute_cost(spec.model, usage)
         result.elapsed_ms = (time.monotonic() - start) * 1000
-
-
-def _accumulate_usage(usage: TokenUsage, chunk: BaseMessageChunk) -> None:
-    """Pull token counts off ``chunk.usage_metadata`` and add them to ``usage``."""
-    metadata = getattr(chunk, "usage_metadata", None)
-    if not metadata:
-        return
-    usage += TokenUsage(
-        input_tokens=int(metadata.get("input_tokens", 0)),
-        output_tokens=int(metadata.get("output_tokens", 0)),
-        cache_read_tokens=int(metadata.get("cache_read_input_tokens", 0)),
-        cache_write_tokens=int(metadata.get("cache_creation_input_tokens", 0)),
-        total_tokens=int(metadata.get("total_tokens", 0)),
-    )

@@ -414,7 +414,9 @@ def test_from_env_zero_active_raises_no_providers_configured(monkeypatch):
 
 
 def test_from_env_inactive_adapter_raises_provider_inactive(monkeypatch):
-    """``redis`` is the remaining placeholder type after v0.1 added bedrock/openai."""
+    """``redis`` is reserved for v0.2 backend support — calling it as a provider
+    type raises ``ProviderInactive`` rather than silently passing through.
+    """
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -425,6 +427,33 @@ def test_from_env_inactive_adapter_raises_provider_inactive(monkeypatch):
         assert "redis" in str(exc).lower()
         return
     raise AssertionError("expected ProviderInactive for redis (still placeholder)")
+
+
+def test_from_env_unknown_provider_type_logs_warning(monkeypatch, caplog):
+    """Typo / unsupported provider types are skipped (existing contract) but
+    must emit a WARN log so the user notices misconfiguration. Without this,
+    a typo like ``antrophic`` silently produces ``NoProvidersConfigured`` with
+    no hint at the cause.
+    """
+    import logging
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-1234567890")
+
+    import contextlib
+
+    typo = "antrophic"
+    with (
+        caplog.at_level(logging.WARNING, logger="robust_llm_chain.chain"),
+        contextlib.suppress(Exception),
+    ):
+        RobustChain.from_env(model_ids={typo: "ignored", "anthropic": "claude-haiku"})
+
+    matched = [r for r in caplog.records if typo in r.getMessage()]
+    actual = [r.getMessage() for r in caplog.records]
+    assert matched, f"expected WARN log mentioning {typo!r}; got {actual}"
 
 
 def test_from_env_openai_active(monkeypatch):

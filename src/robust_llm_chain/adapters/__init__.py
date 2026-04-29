@@ -7,11 +7,16 @@ built-in adapters use the same interface — no special treatment.
 """
 
 from collections.abc import Mapping
-from typing import ClassVar, Protocol
+from typing import ClassVar, Final, Protocol
 
 from langchain_core.language_models.chat_models import BaseChatModel
 
 from robust_llm_chain.types import ProviderSpec
+
+#: Library default ``max_output_tokens`` shared across built-in adapters when
+#: ``ModelSpec.max_output_tokens`` is unset. Centralized here so a single edit
+#: shifts every adapter (CODING_STYLE §1.7 — 3-strike DRY).
+DEFAULT_MAX_OUTPUT_TOKENS: Final[int] = 4096
 
 
 class ProviderAdapter(Protocol):
@@ -58,4 +63,4 @@ def get_adapter(type_: str) -> ProviderAdapter:
     return _ADAPTER_REGISTRY[type_]
 
 
-__all__ = ["ProviderAdapter", "get_adapter", "register_adapter"]
+__all__ = ["DEFAULT_MAX_OUTPUT_TOKENS", "ProviderAdapter", "get_adapter", "register_adapter"]

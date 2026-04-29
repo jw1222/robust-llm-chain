@@ -11,14 +11,12 @@ from typing import ClassVar, Final
 from langchain_core.language_models.chat_models import BaseChatModel
 from pydantic import SecretStr
 
+from robust_llm_chain.adapters import DEFAULT_MAX_OUTPUT_TOKENS
 from robust_llm_chain.errors import ProviderInactive
 from robust_llm_chain.types import ProviderSpec
 
 #: OpenRouter's OpenAI-compatible endpoint.
 OPENROUTER_BASE_URL: Final[str] = "https://openrouter.ai/api/v1"
-
-#: Library default when ``ModelSpec.max_output_tokens`` is unset.
-_DEFAULT_MAX_OUTPUT_TOKENS: Final[int] = 4096
 
 
 class OpenRouterAdapter:
@@ -45,7 +43,7 @@ class OpenRouterAdapter:
         api_key = SecretStr(spec.api_key) if spec.api_key is not None else SecretStr("")
         return ChatOpenAI(
             model=spec.model.model_id,
-            max_completion_tokens=spec.model.max_output_tokens or _DEFAULT_MAX_OUTPUT_TOKENS,
+            max_completion_tokens=spec.model.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS,
             api_key=api_key,
             base_url=OPENROUTER_BASE_URL,
         )

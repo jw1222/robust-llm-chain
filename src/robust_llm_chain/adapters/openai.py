@@ -6,16 +6,14 @@ Activated by ``pip install "robust-llm-chain[openai]"``. Reuses the same
 """
 
 from collections.abc import Mapping
-from typing import ClassVar, Final
+from typing import ClassVar
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from pydantic import SecretStr
 
+from robust_llm_chain.adapters import DEFAULT_MAX_OUTPUT_TOKENS
 from robust_llm_chain.errors import ProviderInactive
 from robust_llm_chain.types import ProviderSpec
-
-#: Library default when ``ModelSpec.max_output_tokens`` is unset.
-_DEFAULT_MAX_OUTPUT_TOKENS: Final[int] = 4096
 
 
 class OpenAIAdapter:
@@ -36,7 +34,7 @@ class OpenAIAdapter:
                 'openai adapter requires `pip install "robust-llm-chain[openai]"`'
             ) from e
 
-        max_tokens = spec.model.max_output_tokens or _DEFAULT_MAX_OUTPUT_TOKENS
+        max_tokens = spec.model.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS
         if spec.api_key is None:
             # Let ChatOpenAI pick up OPENAI_API_KEY from env via its own
             # default_factory — omit the kwarg entirely.
