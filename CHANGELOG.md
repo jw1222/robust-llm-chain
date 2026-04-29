@@ -24,6 +24,8 @@
 - **`copy.copy` / `copy.deepcopy` 동작 명시**: `__getstate__` / `__setstate__` 오버라이드가 Python copy protocol 에도 동일 적용 → `copy.deepcopy(spec)` 도 credential 을 잃음 (None). 사용자가 spec 을 런타임 재사용 목적으로 복사하면 인증 실패 가능 — `SECURITY.md` #1 에 "spec 재사용 목적이면 copy 가 아니라 새 ProviderSpec 생성" 가이드 추가.
 - **`asdict(ChainResult)` footgun 명시**: `ChainResult.provider_used` 가 `ProviderSpec` 을 보유하므로 `asdict(result)` 가 nested credential 평문 노출. `SECURITY.md` #1 에 직접 언급 추가 (이전엔 embedded ProviderSpec 일반화로만 언급).
 - **`ARCHITECTURE.md §4` Credential masking 갱신**: layer #5 (`compare=False`) + layer #6 (`__getstate__` / `__setstate__`) 추가, "every channel" → "most channels" + asdict 미보장 명시 + `SECURITY.md §1` cross-ref.
+- **`pyproject.toml` sdist include 보강**: `SECURITY.md` / `CONTRIBUTING.md` / `CODE_OF_CONDUCT.md` 추가 — sdist-only 사용자도 보안 보장표 / TDD 룰 / CoC 접근 가능 (Round 3 종합 리뷰 + CSO 합의 발견).
+- **`_security.py` docstring**: `_KEY_PATTERNS` 가 best-effort 임을 코드 reader 가 즉시 인지하도록 한 줄 명시 + `SECURITY.md §2` cross-ref.
 
 ### Documentation
 - **`ARCHITECTURE.md` 를 project root 로 승격** — 외부 contributor 친화적. 모듈 구조 / 의존 그래프 / 호출 lifecycle / 데이터 모델 / 에러 흐름 / public surface / 확장점 (custom ProviderAdapter / IndexBackend / fail-closed semantics) 정리. README 의 새 "Architecture" 섹션에서 링크. `pyproject.toml [tool.hatch.build.targets.sdist]` 에 포함되어 PyPI sdist 와 함께 배포.

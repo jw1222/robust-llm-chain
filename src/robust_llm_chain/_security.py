@@ -11,8 +11,9 @@ from __future__ import annotations
 import re
 from typing import Final
 
-# Patterns chosen to be specific enough to avoid false positives on normal
-# identifiers while catching common provider key formats.
+# Best-effort patterns — see SECURITY.md §2 for limitations (LangSmith service
+# tokens, AWS STS / temporary credentials are NOT covered; the 40-char base64
+# fallback can mask non-credential strings as a conservative trade-off).
 _KEY_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"sk-[A-Za-z0-9_-]{20,}"),  # Anthropic, OpenAI, OpenRouter
     re.compile(r"AKIA[0-9A-Z]{16}"),  # AWS access key id
