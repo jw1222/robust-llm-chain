@@ -317,6 +317,12 @@ except ProviderTimeout as e:
 
 ---
 
+## Architecture
+
+Module structure, dependency graph, call lifecycle (`acall` / `ainvoke` / `astream`), error flow, and extension points (custom `ProviderAdapter` / `IndexBackend`) are documented in [ARCHITECTURE.md](ARCHITECTURE.md). Read that before opening a PR or wiring a custom adapter.
+
+---
+
 ## Status
 
 **v0.1 is in active development.** Tested on **Python 3.13 only** (3.12 / 3.11 will be added in v0.2 / v1.0). Public API may break before 1.0; all changes will be documented in [CHANGELOG.md](CHANGELOG.md).

@@ -16,6 +16,9 @@
 - README: extras 표 / env 표 / "Three things" / "Who is this for" / Advanced usage 갱신. multi-key, multi-region (Bedrock east/west), 3-way Claude (Anthropic + Bedrock + OpenRouter), Claude → GPT cross-vendor cross-model 패턴 추가.
 - `.env.example`: OpenAI / Bedrock 의 v0.2 라벨 제거.
 
+### Documentation
+- **`ARCHITECTURE.md` 를 project root 로 승격** — 외부 contributor 친화적. 모듈 구조 / 의존 그래프 / 호출 lifecycle / 데이터 모델 / 에러 흐름 / public surface / 확장점 (custom ProviderAdapter / IndexBackend / fail-closed semantics) 정리. README 의 새 "Architecture" 섹션에서 링크. `pyproject.toml [tool.hatch.build.targets.sdist]` 에 포함되어 PyPI sdist 와 함께 배포.
+
 ### Added — Phase 4 (T1~T13) 완료
 - **공개 데이터 모델** (`types.py`): `RobustChainInput` PEP 695 alias, `ProviderSpec` (slots + `__repr__` 마스킹), `ModelSpec`, `PricingSpec`, `TokenUsage` (`__add__`/`__iadd__`), `CostEstimate`, `ChainResult` (mutable, astream lifecycle), `AttemptRecord`, `TimeoutConfig`.
 - **에러 계층** (`errors.py`): `RobustChainError` 베이스 + 10 전문화 클래스, `is_fallback_eligible` 3단계 분류 (typed → SDK class → keyword).

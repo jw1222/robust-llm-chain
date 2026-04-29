@@ -63,6 +63,7 @@ packages = ["src/robust_llm_chain"]
 include = [
     "src/robust_llm_chain",
     "README.md",
+    "ARCHITECTURE.md",
     "LICENSE",
     "CHANGELOG.md",
     "pyproject.toml",
