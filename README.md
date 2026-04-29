@@ -225,7 +225,7 @@ There are **three ways** to tell `RobustChain` which providers to use. They diff
 
 - "Just want one Claude + one OpenAI from env vars, simplest possible" → `from_env`. Done.
 - **"Need multi-key / multi-region / cross-vendor / explicit priority — but env-friendly"** → **`RobustChain.builder()`** (recommended for most production). See [`examples/builder.py`](examples/builder.py).
-- "Already constructing `ProviderSpec` instances elsewhere in code" → explicit `providers=[...]` list. See [`examples/advanced.py`](examples/advanced.py).
+- "Already constructing `ProviderSpec` instances elsewhere in code (config loader, orchestrator)" → explicit `providers=[ProviderSpec(...)]` list. See the inline code in [Advanced usage](#advanced-usage) below.
 
 > **Builder vs `from_env` silent-skip:** the builder raises `KeyError` with the exact missing env var name when a credential isn't found, instead of silently dropping the provider. That trades 12-factor convenience for explicitness — usually what you want once you're past dev.
 
@@ -303,7 +303,7 @@ For most users the answer is **"use both"**: this library handles the cross-vend
 
 ## Advanced usage
 
-> **Runnable examples:** all four patterns below — multi-key, 3-way Claude failover, cross-vendor (Claude → GPT), Bedrock multi-region — are runnable scripts in [`examples/advanced.py`](examples/advanced.py). Try with `uv run python examples/advanced.py multikey` (or `3way` / `xvendor` / `multiregion`).
+> **Runnable examples:** all four patterns below — multi-key, 3-way Claude failover, cross-vendor (Claude → GPT), Bedrock multi-region — are runnable scripts in [`examples/builder.py`](examples/builder.py) (using `RobustChain.builder()`). Try with `uv run python examples/builder.py multikey` (or `3way` / `xvendor` / `multiregion`). The inline code blocks below show the same patterns expressed via explicit `providers=[ProviderSpec(...)]` for use cases where you already have spec instances from a config loader.
 
 ### Multi-worker production (Memcached-coordinated round-robin)
 ```python

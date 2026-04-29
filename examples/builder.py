@@ -1,5 +1,9 @@
-"""Builder patterns — same 4 production scenarios as ``examples/advanced.py``,
-expressed via ``RobustChain.builder()`` (the third configuration path).
+"""Builder patterns — 4 production scenarios via ``RobustChain.builder()``.
+
+This is the canonical reference for ``RobustChain.builder()`` (the recommended
+configuration path — fluent, multi-key OK, fail-fast on missing env). For the
+explicit ``providers=[ProviderSpec(...)]`` path, see the inline code blocks
+in the README "Advanced usage" section.
 
 The builder collapses the dict-vs-list semantic split: every pattern (single
 provider, multi-key, multi-region, cross-vendor) uses the same chained

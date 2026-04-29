@@ -225,7 +225,7 @@ result.attempts                     # → [
 
 - "그냥 env 에서 Claude 1개 + OpenAI 1개, 가장 단순하게" → `from_env`. 끝.
 - **"multi-key / multi-region / cross-vendor / 명시 priority — env-friendly 하면서"** → **`RobustChain.builder()`** (대부분 production 권장). [`examples/builder.py`](examples/builder.py) 참조.
-- "다른 코드에서 `ProviderSpec` 인스턴스를 이미 만들고 있어" → 명시 `providers=[...]` list. [`examples/advanced.py`](examples/advanced.py) 참조.
+- "다른 코드에서 `ProviderSpec` 인스턴스를 이미 만들고 있어 (config loader, orchestrator)" → 명시 `providers=[ProviderSpec(...)]` list. 아래 [Advanced usage](#advanced-usage) 섹션의 inline 코드 참조.
 
 > **Builder 와 `from_env` silent-skip 비교:** builder 는 credential 누락 시 정확한 env var 이름 포함한 `KeyError` 즉시 raise. `from_env` 처럼 silent 로 provider 를 떨어뜨리지 않는다. 12-factor 편의를 명확성으로 교환 — dev 단계 지나면 보통 원하는 동작.
 
@@ -303,7 +303,7 @@ result.attempts                     # → [
 
 ## Advanced usage
 
-> **실행 가능 예제:** 아래 4 가지 패턴 — multi-key, 3-way Claude 페일오버, cross-vendor (Claude → GPT), Bedrock multi-region — 은 [`examples/advanced.py`](examples/advanced.py) 에 실행 가능 스크립트로 들어 있다. `uv run python examples/advanced.py multikey` (또는 `3way` / `xvendor` / `multiregion`) 로 실행.
+> **실행 가능 예제:** 아래 4 가지 패턴 — multi-key, 3-way Claude 페일오버, cross-vendor (Claude → GPT), Bedrock multi-region — 은 [`examples/builder.py`](examples/builder.py) 에 `RobustChain.builder()` 로 실행 가능 스크립트로 들어 있다. `uv run python examples/builder.py multikey` (또는 `3way` / `xvendor` / `multiregion`) 로 실행. 아래 inline 코드 블록은 같은 패턴을 명시 `providers=[ProviderSpec(...)]` 로 표현 — config loader 에서 spec 인스턴스를 이미 만들고 있는 use case 용.
 
 ### Multi-worker 프로덕션 (Memcached 조율 라운드 로빈)
 ```python

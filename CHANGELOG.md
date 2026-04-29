@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Removed (post-v0.2.0)
+- `examples/advanced.py` — `examples/builder.py` (v0.2.0) 와 같은 4 시나리오를 explicit `ProviderSpec` list 로 표현했던 예제. v0.2.0 에서 builder 가 권장 path 가 됐고 두 example 의 시나리오가 100% 중복이라 maintenance 부담만 ↑ (한 모델 ID 변경 시 두 file 수정). 사용자 명료성 + DRY 측면에서 builder.py 만 canonical 로 유지. explicit `providers=[ProviderSpec(...)]` path 가 필요한 경우 (config loader / orchestrator) README "Advanced usage" 의 inline 코드 블록이 reference 역할.
+
 ### Future backlog (post-v0.2.0 — Codex / quality round 누적 권고, 모두 의도된 미룸)
 - `to_safe_dict()` helper — `asdict(ChainResult)` footgun 의 안전한 직렬화 경로 (Codex R2/R3/R4 강조).
 - 명시적 `__copy__` / `__deepcopy__` — 현 `__getstate__` 동작 (credential drop) 으로 안전하나 SECURITY.md §1 명시만으로 충분.

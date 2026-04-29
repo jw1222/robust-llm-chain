@@ -12,8 +12,8 @@ common pattern (multiple providers via env defaults) without the dict /
 vendor-prefix collision that ``from_env(model_ids={...})`` can show, and
 without the verbosity of constructing ``ProviderSpec`` instances by hand.
 For multi-key / multi-region / cross-vendor patterns, see
-``examples/builder.py``. For the explicit-list path, see
-``examples/advanced.py``.
+``examples/builder.py``. For the explicit ``providers=[ProviderSpec(...)]``
+path, see the inline code blocks in the README "Advanced usage" section.
 """
 
 import asyncio
