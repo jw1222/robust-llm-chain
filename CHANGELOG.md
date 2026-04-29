@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added (post-v0.1.0 GitHub release)
+- **`examples/advanced.py`** — runnable scripts for 4 production patterns: `multikey` (두 Anthropic 키 round-robin), `3way` (Anthropic + Bedrock + OpenRouter 3-way Claude failover), `xvendor` (Claude → GPT cross-vendor cross-model), `multiregion` (Bedrock east + west). README "Advanced usage" 섹션이 이제 코드 + 실행 가능한 example 모두 가리킴. v0.1.0 GitHub release 후 사용자 질문 ("multi-key 샘플은?" + "model id 는 사용자가 넣는가?" → yes, 의도된 디자인) 반영.
+
+
 ### v0.2 backlog (Codex / quality round 누적 권고, 모두 의도된 미룸)
 - `to_safe_dict()` helper — `asdict(ChainResult)` footgun 의 안전한 직렬화 경로 (Codex R2/R3/R4 강조).
 - 명시적 `__copy__` / `__deepcopy__` — 현 `__getstate__` 동작 (credential drop) 으로 안전하나 SECURITY.md §1 명시만으로 충분.

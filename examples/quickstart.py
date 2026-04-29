@@ -7,9 +7,8 @@ Requires both ``ANTHROPIC_API_KEY`` and ``OPENROUTER_API_KEY`` in the
 environment. With either missing, the library raises
 ``NoProvidersConfigured`` immediately so you get a clear error.
 
-Note: this script needs the Phase 4 implementation of ``RobustChain.from_env``
-to actually run end-to-end. It is committed in Phase 3 so the README example
-and ``examples/quickstart.py`` stay byte-identical from day one.
+For multi-key / multi-region / cross-vendor patterns (anything beyond "one
+provider per type"), see ``examples/advanced.py``.
 """
 
 import asyncio

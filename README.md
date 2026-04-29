@@ -168,6 +168,8 @@ For most users the answer is **"use both"**: this library handles the cross-vend
 
 ## Advanced usage
 
+> **Runnable examples:** all four patterns below — multi-key, 3-way Claude failover, cross-vendor (Claude → GPT), Bedrock multi-region — are runnable scripts in [`examples/advanced.py`](examples/advanced.py). Try with `uv run python examples/advanced.py multikey` (or `3way` / `xvendor` / `multiregion`).
+
 ### Multi-worker production (Memcached-coordinated round-robin)
 ```python
 import aiomcache
