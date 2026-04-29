@@ -56,17 +56,19 @@ class ModelSpec:
 class ProviderSpec:
     """Authentication / connection info bundled with the model to use.
 
-    Credential fields use ``repr=False`` and a custom ``__repr__`` to prevent
-    accidental key exposure in logs. ``slots=True`` blocks ``vars(spec)``
-    bypass.
+    Credential fields are excluded from ``__repr__`` (custom ``__repr__``),
+    equality / hash (``compare=False``), and pickle serialization (custom
+    ``__getstate__`` / ``__setstate__``). ``slots=True`` blocks ``vars(spec)``
+    bypass. ``dataclasses.asdict()`` / ``astuple()`` traverse fields
+    unconditionally and are not safe — use ``repr(spec)`` for logging.
     """
 
     id: str
     type: str
     model: ModelSpec
-    api_key: str | None = field(default=None, repr=False)
-    aws_access_key_id: str | None = field(default=None, repr=False)
-    aws_secret_access_key: str | None = field(default=None, repr=False)
+    api_key: str | None = field(default=None, repr=False, compare=False)
+    aws_access_key_id: str | None = field(default=None, repr=False, compare=False)
+    aws_secret_access_key: str | None = field(default=None, repr=False, compare=False)
     region: str | None = None
     priority: int = 0
 
@@ -76,6 +78,21 @@ class ProviderSpec:
             f"model={self.model!r}, region={self.region!r}, "
             f"priority={self.priority})"
         )
+
+    def __getstate__(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "type": self.type,
+            "model": self.model,
+            "region": self.region,
+            "priority": self.priority,
+        }
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        for key in ("id", "type", "model", "region", "priority"):
+            object.__setattr__(self, key, state[key])
+        for key in ("api_key", "aws_access_key_id", "aws_secret_access_key"):
+            object.__setattr__(self, key, None)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

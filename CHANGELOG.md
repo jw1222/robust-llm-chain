@@ -18,9 +18,15 @@
 - README: extras 표 / env 표 / "Three things" / "Who is this for" / Advanced usage 갱신. multi-key, multi-region (Bedrock east/west), 3-way Claude (Anthropic + Bedrock + OpenRouter), Claude → GPT cross-vendor cross-model 패턴 추가.
 - `.env.example`: OpenAI / Bedrock 의 v0.2 라벨 제거.
 
+### Security
+- **`ProviderSpec` credential 마스킹 강화** (`types.py`): credential 3 필드 (`api_key` / `aws_access_key_id` / `aws_secret_access_key`) 에 `compare=False` 추가 — pytest assertion introspection 시 credential 평문이 diff 출력에 노출되던 경로 차단. `__getstate__` / `__setstate__` 오버라이드로 `pickle.dumps(spec)` 가 credential 을 직렬화하지 않도록 함 (분산 task queue / 캐시 / multiprocess 전송 시 누출 방지). `dataclasses.asdict()` / `astuple()` 은 dataclass 표준 동작상 모든 필드를 무조건 traverse 하므로 credential 노출 — `SECURITY.md` #1 에 미보장 경로로 명시 + 안전한 사용법 (`repr(spec)` 권장) 가이드 추가.
+- **SECURITY.md hardening 정확성 보강**: #1 보장 경로 / 미보장 경로 표 형식으로 명확화. #2 `_security.sanitize_message` 패턴이 best-effort 임을 명시 (LangSmith service token / AWS STS / 광범위 base64 false positive 한계).
+
 ### Documentation
 - **`ARCHITECTURE.md` 를 project root 로 승격** — 외부 contributor 친화적. 모듈 구조 / 의존 그래프 / 호출 lifecycle / 데이터 모델 / 에러 흐름 / public surface / 확장점 (custom ProviderAdapter / IndexBackend / fail-closed semantics) 정리. README 의 새 "Architecture" 섹션에서 링크. `pyproject.toml [tool.hatch.build.targets.sdist]` 에 포함되어 PyPI sdist 와 함께 배포.
 - **OSS 표준 문서 정리**: CONTRIBUTING / SECURITY / CODE_OF_CONDUCT (root) + `.github/ISSUE_TEMPLATE/` (bug_report + feature_request) + `.github/PULL_REQUEST_TEMPLATE.md` 추가. contributor 친화적 표준 갖춤.
+- **`adapters/__init__.py` docstring**: built-in 4 provider (anthropic / openrouter / openai / bedrock) 모두 명시 (Round 0 결정 변경 후 갱신 누락 보정).
+- **`pyproject.toml` PyPI metadata 보정**: keywords 에 `openai` / `bedrock` 추가, classifier `Development Status :: 3 - Alpha` → `4 - Beta` (version `0.1.0` 이 non-prerelease 인 점과 일관).
 
 ### Added — Phase 4 (T1~T13) 완료
 - **공개 데이터 모델** (`types.py`): `RobustChainInput` PEP 695 alias, `ProviderSpec` (slots + `__repr__` 마스킹), `ModelSpec`, `PricingSpec`, `TokenUsage` (`__add__`/`__iadd__`), `CostEstimate`, `ChainResult` (mutable, astream lifecycle), `AttemptRecord`, `TimeoutConfig`.

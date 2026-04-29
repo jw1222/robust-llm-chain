@@ -1,9 +1,9 @@
-"""Provider adapters: built-in (``anthropic``, ``openrouter``) + extensible registry.
+"""Provider adapters: extensible registry with four built-in adapters.
 
-Public surface: ``ProviderAdapter`` Protocol, ``register_adapter``,
-``get_adapter``. Custom adapters (e.g. Mistral) implement the Protocol and
-register themselves; built-in adapters use the same interface — no special
-treatment.
+Built-in: ``anthropic``, ``openrouter``, ``openai``, ``bedrock``. Public
+surface: ``ProviderAdapter`` Protocol, ``register_adapter``, ``get_adapter``.
+Custom adapters (e.g. Mistral) implement the Protocol and register themselves;
+built-in adapters use the same interface — no special treatment.
 """
 
 from collections.abc import Mapping

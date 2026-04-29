@@ -12,9 +12,9 @@ license = "MIT"
 authors = [
     { name = "jw1222" },
 ]
-keywords = ["llm", "anthropic", "openrouter", "langchain", "failover", "resilience"]
+keywords = ["llm", "anthropic", "openai", "openrouter", "bedrock", "langchain", "failover", "resilience"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",

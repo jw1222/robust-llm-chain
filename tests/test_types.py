@@ -102,6 +102,74 @@ def test_provider_spec_slots_blocks_dict_access():
         raise AssertionError("ProviderSpec should not expose __dict__ when slots=True")
 
 
+def test_provider_spec_pickle_drops_credentials():
+    """Pickle serialization must not include credential fields.
+
+    Hardening: prevents credentials from leaking through ``pickle.dumps`` (e.g.
+    distributed task queues, cache layers, multiprocess transports). The
+    unpickled clone preserves all non-credential fields.
+    """
+    import pickle
+
+    secret_marker = "do-not-leak-via-pickle-9876543210"
+    aws_secret_marker = "AWS-pickle-leak-canary-zzzzzzzz"
+    spec = ProviderSpec(
+        id="anthropic-direct",
+        type="anthropic",
+        model=ModelSpec(model_id="claude-haiku-4-5-20251001"),
+        api_key=secret_marker,
+        aws_access_key_id="AKIA-pickle-canary",
+        aws_secret_access_key=aws_secret_marker,
+        region="us-east-1",
+        priority=5,
+    )
+
+    blob = pickle.dumps(spec)
+    # Raw bytes must not contain credential strings.
+    assert secret_marker.encode() not in blob
+    assert aws_secret_marker.encode() not in blob
+    assert b"AKIA-pickle-canary" not in blob
+
+    restored = pickle.loads(blob)
+    # Credentials cleared on restore.
+    assert restored.api_key is None
+    assert restored.aws_access_key_id is None
+    assert restored.aws_secret_access_key is None
+    # Non-credential fields preserved.
+    assert restored.id == "anthropic-direct"
+    assert restored.type == "anthropic"
+    assert restored.model.model_id == "claude-haiku-4-5-20251001"
+    assert restored.region == "us-east-1"
+    assert restored.priority == 5
+
+
+def test_provider_spec_compare_ignores_credentials():
+    """Equality must ignore credential fields.
+
+    Hardening: prevents credentials from leaking via pytest assertion
+    introspection — when two specs compare equal on identity but differ on
+    api_key, pytest would otherwise diff and print credential values in the
+    failure output.
+    """
+    base_kwargs = {
+        "id": "anthropic-direct",
+        "type": "anthropic",
+        "model": ModelSpec(model_id="claude-haiku-4-5-20251001"),
+        "region": "us-east-1",
+        "priority": 0,
+    }
+    a = ProviderSpec(**base_kwargs, api_key="sk-secret-A")
+    b = ProviderSpec(**base_kwargs, api_key="sk-secret-B")
+    c = ProviderSpec(
+        **base_kwargs,
+        aws_access_key_id="AKIA-different",
+        aws_secret_access_key="aws-secret-different",
+    )
+
+    assert a == b, "credential difference must not affect equality"
+    assert a == c, "credential difference must not affect equality"
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Other dataclasses — basic shape
 # ──────────────────────────────────────────────────────────────────────────────
