@@ -143,7 +143,13 @@ def multiregion() -> None:
 
     For blast-radius isolation (separate IAM users per region, cross-account
     deployments, etc.) pass per-region credentials explicitly — see the
-    commented-out variant below.
+    commented-out variant below. The variant points the builder at *different*
+    env var names (``AWS_ACCESS_KEY_ID_EAST`` / ``AWS_SECRET_ACCESS_KEY_EAST``
+    / ``AWS_ACCESS_KEY_ID_WEST`` / ``AWS_SECRET_ACCESS_KEY_WEST``); those env
+    vars must be exported beforehand. Pick any naming convention you like —
+    ``_1``/``_2``, ``_PRIMARY``/``_BACKUP``, etc. all work. To avoid env vars
+    entirely, pass ``aws_access_key_id=`` / ``aws_secret_access_key=`` and
+    source the value from a secrets manager.
 
     Required env: ``AWS_ACCESS_KEY_ID``, ``AWS_SECRET_ACCESS_KEY``
     """
