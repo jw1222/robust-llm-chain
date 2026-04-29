@@ -14,6 +14,7 @@
 
 
 ### v0.2 backlog (Codex / quality round 누적 권고, 모두 의도된 미룸)
+- **Fluent builder API** — `RobustChain.builder().add_anthropic(env_var="ANTHROPIC_API_KEY", model="...").add_openrouter(...).build()` 패턴. 현재 `from_env(model_ids={...})` (dict-based, single-per-type 제약) vs `RobustChain(providers=[ProviderSpec(...)])` (list-based, full power) 두 path 의 capability 차이가 사용자 mental model 측면에서 confusing 하다는 catch (사용자 dogfooding 발견). Builder 가 single + multi-key + multi-region 모두 동일 API 로 표현 가능 — 두 path 합치는 중간 layer. additive (기존 path 모두 유지). v0.2 minor.
 - `to_safe_dict()` helper — `asdict(ChainResult)` footgun 의 안전한 직렬화 경로 (Codex R2/R3/R4 강조).
 - 명시적 `__copy__` / `__deepcopy__` — 현 `__getstate__` 동작 (credential drop) 으로 안전하나 SECURITY.md §1 명시만으로 충분.
 - `_KEY_PATTERNS` 에 LangSmith service token / AWS STS / 추가 prefix 보강 (현재 best-effort qualifier 명시).

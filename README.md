@@ -213,9 +213,32 @@ The library does **not** depend on `python-dotenv`. Loading `.env` files is up t
 
 ---
 
-## Environment Variables
+## Provider configuration — two paths
 
-Recognized by `RobustChain.from_env()`:
+There are **two ways** to tell `RobustChain` which providers to use. They differ in **what they can express**, not just style:
+
+| Capability | `RobustChain.from_env(model_ids={...})` | `RobustChain(providers=[ProviderSpec(...)])` |
+|---|---|---|
+| Source of credentials | env vars (auto-read) | explicit `api_key=...` (or `None` → SDK env fallback) |
+| Source of model_id | dict value | `ModelSpec(model_id=...)` field |
+| One provider per type (e.g. one Anthropic + one OpenAI) | ✅ | ✅ |
+| **Multiple keys for the same type** (e.g. `anthropic1` + `anthropic2` for rate-limit headroom) | ❌ — dict key is unique | ✅ — same `type`, distinct `id` |
+| **Multi-region** (Bedrock east + west) | ❌ — single `AWS_REGION` env | ✅ — explicit per-spec `region` |
+| **Different model_ids on the same type** | ❌ — dict key is unique | ✅ — different `model.model_id` per spec |
+| **Per-spec `priority` ordering** | ❌ — uniform default `0` | ✅ — explicit ordering primary→fallback |
+| Missing API_KEY for a configured type | silent skip → that provider is dropped, others still build | n/a (you supplied the key explicitly) |
+| Mental model | 12-factor / env-driven | code-as-config |
+| **Use when** | Dev, single-vendor-per-type production, env-driven deploys | Multi-key, multi-region, cross-vendor, per-spec tuning, anything operational |
+
+### Quick decision tree
+
+- "Just want one Claude + one OpenAI from env vars" → `from_env`. Done.
+- "Need two Anthropic keys" / "Bedrock east + west" / "Claude → GPT cross-vendor fallback" / "primary-then-backup priority" → **explicit `providers=[ProviderSpec(...)]`**. See [`examples/advanced.py`](examples/advanced.py).
+- Not sure → start with explicit `providers=[...]`. It's a few more lines but never surprises you.
+
+> **Caveat — `from_env` silent skip:** if a type is in `model_ids` but its env var is missing, that provider is silently skipped. This is intentional (12-factor convention — "activate what's available") but means a typo'd env var name can produce a `NoProvidersConfigured` error with no hint at the cause. The explicit `providers=[...]` path doesn't have this trap. (Roadmap: a fluent builder API in v0.2 — see [CHANGELOG `[Unreleased]`](CHANGELOG.md) — will collapse the two paths into one.)
+
+### Recognized environment variables (for `from_env`)
 
 | Variable | Provider | Active in v0.1 | Notes |
 |---|---|---|---|
@@ -223,8 +246,6 @@ Recognized by `RobustChain.from_env()`:
 | `OPENROUTER_API_KEY` | openrouter | ✅ | OpenRouter (any vendor's model) |
 | `OPENAI_API_KEY` | openai | ✅ | OpenAI Direct (`gpt-*`, `o1-*`, etc.) |
 | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` + `AWS_REGION` | bedrock | ✅ | All three required; missing any one → provider skipped |
-
-> **`from_env()` covers the simple "one provider per type" path.** For multi-key (e.g. primary + backup Anthropic keys) or multi-region (Bedrock east + west) patterns, build the `ProviderSpec` list explicitly — see [Advanced usage](#advanced-usage).
 
 ---
 

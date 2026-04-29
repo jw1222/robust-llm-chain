@@ -213,9 +213,32 @@ result.attempts                     # → [
 
 ---
 
-## Environment Variables
+## Provider 설정 — 두 가지 path
 
-`RobustChain.from_env()` 가 인식하는 변수:
+`RobustChain` 에 어떤 provider 를 쓸지 알려주는 방식이 **두 가지**다. 단순한 스타일 차이가 아니라 **표현 가능한 capability** 가 다르다:
+
+| Capability | `RobustChain.from_env(model_ids={...})` | `RobustChain(providers=[ProviderSpec(...)])` |
+|---|---|---|
+| credential source | env vars (자동 read) | 명시 `api_key=...` (또는 `None` → SDK env fallback) |
+| model_id source | dict value | `ModelSpec(model_id=...)` 필드 |
+| 타입당 provider 하나 (예: Anthropic 1개 + OpenAI 1개) | ✅ | ✅ |
+| **같은 타입에 여러 키** (예: rate-limit headroom 위해 `anthropic1` + `anthropic2`) | ❌ — dict key 가 unique | ✅ — 같은 `type`, 다른 `id` |
+| **Multi-region** (Bedrock east + west) | ❌ — `AWS_REGION` env 단일 | ✅ — spec 별 명시 `region` |
+| **같은 타입에 다른 model_id** | ❌ — dict key 가 unique | ✅ — spec 별 다른 `model.model_id` |
+| **spec 별 `priority` 순서** | ❌ — 모두 default `0` | ✅ — primary→fallback 순서 명시 |
+| 설정한 type 의 API_KEY env 누락 | silent skip → 그 provider 만 빠지고 나머지로 chain build | n/a (사용자가 명시 제공) |
+| Mental model | 12-factor / env-driven | code-as-config |
+| **언제 쓰나** | Dev, 타입당 single-vendor production, env-driven 배포 | Multi-key, multi-region, cross-vendor, spec 별 튜닝, 운영 사항 전반 |
+
+### 빠른 결정 흐름
+
+- "그냥 env 변수에서 Claude 1개 + OpenAI 1개 쓰고 싶어" → `from_env`. 끝.
+- "Anthropic 키 두 개" / "Bedrock east + west" / "Claude → GPT cross-vendor fallback" / "primary-then-backup priority" → **명시 `providers=[ProviderSpec(...)]`**. [`examples/advanced.py`](examples/advanced.py) 참조.
+- 잘 모르겠으면 → 명시 `providers=[...]` 로 시작. 몇 줄 더 쓰지만 surprise 없다.
+
+> **주의 — `from_env` silent skip:** `model_ids` 에 type 이 들어 있어도 그 type 의 env 변수가 없으면 그 provider 는 silent 로 skip 된다. 12-factor convention ("있는 거만 활성") 의도지만, env 변수명을 typo 하면 `NoProvidersConfigured` 만 보고 원인을 모를 수 있다. 명시 `providers=[...]` path 는 이 함정이 없다. (Roadmap: v0.2 의 fluent builder API — [CHANGELOG `[Unreleased]`](CHANGELOG.md) 참조 — 가 두 path 를 하나로 합칠 예정.)
+
+### `from_env` 가 인식하는 환경 변수
 
 | Variable | Provider | Active in v0.1 | Notes |
 |---|---|---|---|
@@ -223,8 +246,6 @@ result.attempts                     # → [
 | `OPENROUTER_API_KEY` | openrouter | ✅ | OpenRouter (모든 vendor 의 model) |
 | `OPENAI_API_KEY` | openai | ✅ | OpenAI Direct (`gpt-*`, `o1-*`, 등) |
 | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` + `AWS_REGION` | bedrock | ✅ | 셋 모두 필수; 하나라도 없으면 provider skip |
-
-> **`from_env()` 는 단순한 "타입당 provider 하나" 경로를 커버한다.** Multi-key (예: primary + backup Anthropic key) 또는 multi-region (Bedrock east + west) 패턴은 `ProviderSpec` 리스트를 명시적으로 빌드해야 한다 — [Advanced usage](#advanced-usage) 참조.
 
 ---
 
