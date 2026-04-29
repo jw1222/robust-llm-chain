@@ -26,15 +26,15 @@ class IndexBackend(Protocol):
         in distributed environments. On failure, raise
         :class:`robust_llm_chain.errors.BackendUnavailable`.
         """
-        ...
+        ...  # pragma: no cover — Protocol body, never executed
 
     async def reset(self, key: str) -> None:
         """Delete the index for ``key`` (test/operations utility)."""
-        ...
+        ...  # pragma: no cover — Protocol body, never executed
 
     async def close(self) -> None:
         """Release resources. Idempotent."""
-        ...
+        ...  # pragma: no cover — Protocol body, never executed
 
 
 __all__ = ["IndexBackend", "LocalBackend", "MemcacheClient", "MemcachedBackend"]

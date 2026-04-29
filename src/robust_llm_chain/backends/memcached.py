@@ -36,14 +36,14 @@ class MemcacheClient(Protocol):
 
     async def get(self, key: bytes) -> bytes | None:
         """Return the value for ``key``, or ``None`` if absent."""
-        ...
+        ...  # pragma: no cover — Protocol body, never executed
 
     async def add(self, key: bytes, value: bytes, exptime: int = 0) -> bool:
         """Set ``key`` only if absent. Returns ``False`` if it already exists.
 
         This is the atomic seeding primitive used to bootstrap the counter.
         """
-        ...
+        ...  # pragma: no cover — Protocol body, never executed
 
     async def incr(self, key: bytes, increment: int = 1) -> int | None:
         """Atomically add ``increment`` to ``key``'s current value.
@@ -51,15 +51,15 @@ class MemcacheClient(Protocol):
         Returns the new value, or ``None`` if the key does not exist (the
         caller should seed it via ``add`` and retry).
         """
-        ...
+        ...  # pragma: no cover — Protocol body, never executed
 
     async def delete(self, key: bytes) -> bool:
         """Delete ``key``. Idempotent — returns ``True`` even if absent."""
-        ...
+        ...  # pragma: no cover — Protocol body, never executed
 
     async def close(self) -> None:
         """Release client resources. Idempotent."""
-        ...
+        ...  # pragma: no cover — Protocol body, never executed
 
 
 class MemcachedBackend:

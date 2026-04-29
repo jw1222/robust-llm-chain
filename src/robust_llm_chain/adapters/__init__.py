@@ -33,7 +33,7 @@ class ProviderAdapter(Protocol):
             ProviderModelCreationFailed: When the SDK rejects the
                 configuration.
         """
-        ...
+        ...  # pragma: no cover — Protocol body, never executed
 
     def credentials_present(self, env: Mapping[str, str]) -> dict[str, str] | None:
         """Detect whether ``env`` carries this adapter's credentials.
@@ -41,7 +41,7 @@ class ProviderAdapter(Protocol):
         Returns the credential dict (e.g. ``{"api_key": "..."}``) when
         present, or ``None`` to indicate this provider is not enabled.
         """
-        ...
+        ...  # pragma: no cover — Protocol body, never executed
 
 
 # Module-level registry. ``conftest.py`` snapshots/restores this between tests

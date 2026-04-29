@@ -54,6 +54,13 @@
 - **`env_api_key_credentials` helper 공통화**: 3 adapter (anthropic / openrouter / openai) 의 `credentials_present` 가 100% 동일 패턴 (env.get(KEY) → {'api_key': value} | None). `adapters/__init__.py` 에 `env_api_key_credentials(env, env_var)` 추가, 3 adapter 가 사용. Bedrock 만 multi-field detector 라 별개. 외부 contributor 가 새 single-key adapter 만들 때 활용 가능 (`__all__` 등록). Codex Round (quality) 1시간 권고.
 - **`CostEstimate.__add__` operator + `_update_totals` 슬림** (`types.py` +12줄, `chain.py` -9줄): `CostEstimate` 에 field-wise sum 의 `__add__` dunder 추가 (LHS currency 채택, mixed-currency 는 caller 책임 — orchestrator 는 single-currency 가정). `chain.py` 의 `_update_totals` 가 6-field manual sum boilerplate 대신 operator 사용. `TokenUsage.__add__` / `__iadd__` 와 일관된 orthogonal operator 패턴 (cohesion 향상). /simplify R2 + Codex Review R2 독립 합의 발견.
 
+### Test coverage 보강 (93% → 95%)
+- **Protocol body `pragma: no cover`**: `IndexBackend` (3) + `ProviderAdapter` (2) + `MemcacheClient` (5) Protocol 메서드의 `...` body 10곳에 `# pragma: no cover` 추가 — Protocol 정의일 뿐 실행되지 않는 코드라 정직한 분류 (CODING_STYLE §10).
+- **`tests/test_security.py` 신규** (+7 tests): `sanitize_message` None / truncate / 다중 prefix 매칭 / mask 후 truncate 분기. `_security.py` coverage 78% → 100%.
+- **`tests/test_observability.py` 추가** (+1 test): `_update_run` 의 generic `Exception` 분기 (LangSmith outage / SDK ImportError 시 WARN 로그 + caller 미차단). `langsmith.py` coverage 96% → 100%.
+- **`tests/test_memcached_backend.py` 추가** (+3 tests): `BackendUnavailable` fail-closed (`OSError` on `incr` / `reset`, `add` 실패 후 retry-incr 도 `None` 인 race 케이스). `memcached.py` coverage 77% → 98%.
+- **결과**: 180 → **191 unit pass**, coverage 93% → **95%** (DoD §3.2 의 ≥80% 를 크게 상회).
+
 ### Documentation
 - **`ARCHITECTURE.md` 를 project root 로 승격** — 외부 contributor 친화적. 모듈 구조 / 의존 그래프 / 호출 lifecycle / 데이터 모델 / 에러 흐름 / public surface / 확장점 (custom ProviderAdapter / IndexBackend / fail-closed semantics) 정리. README 의 새 "Architecture" 섹션에서 링크. `pyproject.toml [tool.hatch.build.targets.sdist]` 에 포함되어 PyPI sdist 와 함께 배포.
 - **OSS 표준 문서 정리**: CONTRIBUTING / SECURITY / CODE_OF_CONDUCT (root) + `.github/ISSUE_TEMPLATE/` (bug_report + feature_request) + `.github/PULL_REQUEST_TEMPLATE.md` 추가. contributor 친화적 표준 갖춤.

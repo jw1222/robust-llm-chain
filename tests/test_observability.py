@@ -170,3 +170,29 @@ def test_cleanup_timeout_does_not_block_caller(monkeypatch):
         assert elapsed < 1.0, f"cleanup blocked too long: {elapsed:.2f}s"
 
     asyncio.run(_run())
+
+
+def test_cleanup_swallows_generic_exception_and_warns(monkeypatch, caplog):
+    """Generic ``Exception`` from ``_update_run`` is logged WARN, not propagated.
+
+    LangSmith outage / SDK ImportError must never break the caller's hot path.
+    """
+    monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_pt_test")
+
+    async def _broken_update_run(run_id: str, error: BaseException | None) -> None:
+        raise RuntimeError("langsmith client blew up")
+
+    monkeypatch.setattr(ls, "_update_run", _broken_update_run)
+
+    async def _run():
+        with caplog.at_level(logging.WARNING, logger=ls.logger.name):
+            await ls.cleanup_run("run-x", RuntimeError("inner"))
+        fail_records = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and getattr(r, "event", "") == "langsmith_cleanup_fail"
+        ]
+        assert len(fail_records) == 1
+        assert fail_records[0].error_type == "RuntimeError"
+
+    asyncio.run(_run())

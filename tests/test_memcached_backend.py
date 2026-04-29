@@ -264,3 +264,87 @@ def test_reset_deletes_counter():
         assert await backend.get_and_increment("k") == 0
 
     asyncio.run(_run())
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Fail-closed: BackendUnavailable on transport / SDK errors
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class _UnreachableClient:
+    """Client where every operation raises ``OSError`` — simulates dead memcached."""
+
+    async def get(self, key: bytes) -> bytes | None:
+        raise OSError("connection refused")
+
+    async def add(self, key: bytes, value: bytes, exptime: int = 0) -> bool:
+        raise OSError("connection refused")
+
+    async def incr(self, key: bytes, increment: int = 1) -> int | None:
+        raise OSError("connection refused")
+
+    async def delete(self, key: bytes) -> bool:
+        raise OSError("connection refused")
+
+    async def close(self) -> None:
+        return None
+
+
+def test_get_and_increment_raises_backend_unavailable_on_oserror():
+    """Memcached transport failure must raise ``BackendUnavailable`` (fail-closed)."""
+
+    async def _run():
+        backend = MemcachedBackend(client=_UnreachableClient())
+        try:
+            await backend.get_and_increment("k")
+        except BackendUnavailable as exc:
+            assert "memcached unreachable" in str(exc)
+            return
+        raise AssertionError("expected BackendUnavailable")
+
+    asyncio.run(_run())
+
+
+def test_reset_raises_backend_unavailable_on_oserror():
+    """Reset must also fail-closed when memcached is unreachable."""
+
+    async def _run():
+        backend = MemcachedBackend(client=_UnreachableClient())
+        try:
+            await backend.reset("k")
+        except BackendUnavailable as exc:
+            assert "memcached unreachable" in str(exc)
+            return
+        raise AssertionError("expected BackendUnavailable")
+
+    asyncio.run(_run())
+
+
+class _IncrAlwaysNoneClient(_InMemoryClient):
+    """incr returns None (key never exists) — simulates the cannot-seed race.
+
+    The backend should retry seed via add; if add also reports the key already
+    exists AND incr still returns None, raise BackendUnavailable rather than
+    spinning silently.
+    """
+
+    async def add(self, key: bytes, value: bytes, exptime: int = 0) -> bool:
+        return False  # always lose the seeding race
+
+    async def incr(self, key: bytes, increment: int = 1) -> int | None:
+        return None  # key still does not exist
+
+
+def test_get_and_increment_raises_when_seed_fails_after_lost_race():
+    """If add loses the race AND retry-incr still returns None, fail-closed."""
+
+    async def _run():
+        backend = MemcachedBackend(client=_IncrAlwaysNoneClient())
+        try:
+            await backend.get_and_increment("k")
+        except BackendUnavailable as exc:
+            assert "neither exists after seed nor accepts incr" in str(exc)
+            return
+        raise AssertionError("expected BackendUnavailable")
+
+    asyncio.run(_run())
