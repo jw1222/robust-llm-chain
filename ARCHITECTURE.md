@@ -267,11 +267,15 @@ RobustChainInput = str | PromptValue | list[BaseMessage]   (PEP 695 alias)
 
 ### Credential masking (multi-layer)
 
-`ProviderSpec` blocks credential leakage through every channel:
+`ProviderSpec` blocks credential leakage through most channels — see `SECURITY.md §1` for the authoritative list of covered / not-covered paths:
 1. `field(repr=False)` on `api_key` / `aws_access_key_id` / `aws_secret_access_key` — keys excluded from default `repr`.
 2. Custom `__repr__` ensures masking even if dataclass changes.
 3. `slots=True` removes `__dict__` so `vars(spec)` cannot bypass.
-4. `_security.sanitize_message` runs on `AttemptRecord.error_message` to scrub `sk-…` / `AKIA…` / `lsv2_pt_…` patterns out of error text.
+4. `_security.sanitize_message` runs on `AttemptRecord.error_message` to scrub provider API key prefixes / AWS access key id format / LangSmith personal token format out of error text (best-effort — see `_security.py` `_KEY_PATTERNS` and `SECURITY.md §2` for limitations).
+5. `field(compare=False)` on credential fields — excludes them from `__eq__` / `__hash__`, so pytest assertion introspection cannot print credential values in failure diffs.
+6. Custom `__getstate__` / `__setstate__` — `pickle.dumps(spec)` (and `copy.copy` / `copy.deepcopy`, which use the same protocol) omits credentials from the serialized state and restores them as `None`.
+
+**Not covered**: `dataclasses.asdict(spec)` / `astuple(spec)` traverse all fields unconditionally and expose credentials in plaintext. The same applies recursively to `asdict(ChainResult)` because `ChainResult.provider_used` holds a `ProviderSpec`. For logging or serialization use `repr(spec)` — never `asdict`.
 
 ---
 
