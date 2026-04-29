@@ -84,6 +84,112 @@ print(f"used: {result.provider_used.id} | tokens: {result.usage}")  # metadata
 
 ---
 
+## Anatomy of a result
+
+`acall()` returns `ChainResult` — eight fields with everything you need to log, audit, and observe a call:
+
+| Field | Type | What it carries |
+|---|---|---|
+| `output` | `BaseMessage` | The model's response (`output.content` is the text) |
+| `input` | `list[BaseMessage]` | The normalized prompt actually sent (after `ChatPromptTemplate` rendering) |
+| `usage` | `TokenUsage` | `input_tokens` / `output_tokens` / `cache_read_tokens` / `cache_write_tokens` / `total_tokens` |
+| `cost` | `CostEstimate \| None` | USD per category — `None` when no `PricingSpec` is attached (cost tracking is opt-in) |
+| `provider_used` | `ProviderSpec` | The provider that actually returned the response (the last attempt). Credentials are masked in `repr` |
+| `model_used` | `ModelSpec` | The model spec of the successful provider |
+| `attempts` | `list[AttemptRecord]` | Every provider attempt — successful and failed — in order. See below |
+| `elapsed_ms` | `float` | End-to-end wall clock time |
+
+### Happy path — single provider succeeds
+
+```python
+result = await chain.acall("두 줄로 자기소개 해줘.")
+
+result.output.content              # → "안녕하세요. 저는 Claude 입니다. 두 줄로 자기소개 해 드릴게요."
+result.usage                        # → TokenUsage(input_tokens=18, output_tokens=27, total_tokens=45, ...)
+result.cost                         # → None  (no PricingSpec attached)
+result.provider_used.id             # → "anthropic-direct"
+result.provider_used.type           # → "anthropic"
+result.model_used.model_id          # → "claude-haiku-4-5-20251001"
+result.elapsed_ms                   # → 845.2
+result.attempts                     # → [
+                                    #     AttemptRecord(provider_id="anthropic-direct",
+                                    #                   phase="model_creation", elapsed_ms=12,
+                                    #                   error_type=None, fallback_eligible=False, ...),
+                                    #     AttemptRecord(provider_id="anthropic-direct",
+                                    #                   phase="first_token", elapsed_ms=320,
+                                    #                   error_type=None, fallback_eligible=False, ...),
+                                    #   ]
+```
+
+### Failover path — primary throttles, fallback succeeds
+
+```python
+result = await chain.acall("...")
+
+result.output.content               # → response from OpenRouter
+result.provider_used.id             # → "openrouter-claude"  (the one that succeeded)
+result.attempts                     # → [
+                                    #     AttemptRecord(provider_id="anthropic-direct",
+                                    #                   phase="first_token", elapsed_ms=412,
+                                    #                   error_type="OverloadedError",
+                                    #                   error_message="529: Overloaded",
+                                    #                   fallback_eligible=True, ...),
+                                    #     AttemptRecord(provider_id="openrouter-claude",
+                                    #                   phase="model_creation", elapsed_ms=8,
+                                    #                   error_type=None, fallback_eligible=False, ...),
+                                    #     AttemptRecord(provider_id="openrouter-claude",
+                                    #                   phase="first_token", elapsed_ms=290,
+                                    #                   error_type=None, fallback_eligible=False, ...),
+                                    #   ]
+```
+
+`AttemptRecord.error_message` is **already sanitized** via `_security.sanitize_message` — provider key prefixes are masked and the string is truncated to 200 chars. Safe to log directly.
+
+### `chain.last_result` (contextvars-scoped) and aggregates
+
+| Property | What it carries |
+|---|---|
+| `chain.last_result` | The most recent `ChainResult` for **this `asyncio` task only** (`contextvars`-isolated, so concurrent `asyncio.gather(chain.acall(...), chain.acall(...))` calls don't see each other's results) |
+| `chain.total_token_usage` | Cumulative `TokenUsage` across every successful call on this `RobustChain` instance (lock-protected) |
+| `chain.total_cost` | Cumulative `CostEstimate` across every successful call (`None` until first call with pricing) |
+
+The standard Runnable `ainvoke()` returns just a `BaseMessage`. To inspect `attempts` / `cost` / `usage` after `ainvoke` or `astream`, read `chain.last_result`.
+
+---
+
+## Logging
+
+The library emits **structured WARN/ERROR-only logs** through Python's standard `logging` module. There is no DEBUG/INFO chatter, and **prompt or response text is never logged** — that is the application's responsibility (see [SECURITY.md](SECURITY.md) hardening #3).
+
+### Logger names
+
+| Logger | Source | When it fires |
+|---|---|---|
+| `robust_llm_chain.chain` | `RobustChain` instance + `from_env` | provider build failures, fallback attempts, unknown provider type warnings |
+| `robust_llm_chain.observability.langsmith` | `cleanup_run` | LangSmith outage (timeout / generic exception), backpressure drops |
+
+Both honor whatever handler / formatter / level you configure on the root logger or these specific names. To silence one, `logging.getLogger("robust_llm_chain.chain").setLevel(logging.ERROR)` etc.
+
+### Structured fields (the `extra` payload)
+
+Every WARN/ERROR record carries `extra` fields you can route in JSON formatters or aggregators (Datadog, Splunk, Loki, …):
+
+| Event | Fields |
+|---|---|
+| `langsmith_cleanup_timeout` | `run_id` |
+| `langsmith_cleanup_fail` | `run_id`, `error_type` |
+| `langsmith_cleanup_drop` | `max_inflight` |
+
+Custom logger inject: `RobustChain(providers=..., logger=my_logger)` — wire your own logger if you want a per-chain stream.
+
+### What is NOT logged (by design)
+
+- Prompt text (`input`) and response text (`output.content`) — application's `ChainResult.input` / `ChainResult.output` to persist if needed
+- API keys / AWS credentials — `ProviderSpec.__repr__` masks them; `AttemptRecord.error_message` is sanitized via `_security.sanitize_message` before being stored
+- Per-attempt success debug info — only WARN on failure / fallback events. Production-grade, low-cardinality
+
+---
+
 ## Installation & Extras
 
 | Command | What's included |

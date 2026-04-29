@@ -9,6 +9,7 @@
 
 ### Changed (post-v0.1.0 GitHub release)
 - **`examples/quickstart.py` + README "Quickstart" — 명시 ProviderSpec list 로 변경**: 이전 `from_env(model_ids={"anthropic": "...", "openrouter": "anthropic/..."})` 패턴이 dict key (provider type) 와 value 안 vendor prefix (`anthropic/...`) 모두 "anthropic" 등장으로 학습 곡선 헷갈림 발생 (사용자 catch). 명시 `ProviderSpec(id="anthropic-direct", type="anthropic", model=ModelSpec(model_id="..."), api_key=..., priority=0)` 로 변경 — `id` (사용자 label) / `type` (어댑터) / `model.model_id` (vendor 식별자) 가 분리되어 각 역할 명확. `examples/advanced.py` 와 학습 곡선 일관. `from_env()` 는 README 의 별도 "Shortcut" callout 으로 분리 (의도/한계 명시). README 30-second → "Quickstart" 로 제목 변경 (verbose 해진 만큼 약속도 정직하게).
+- **README "Anatomy of a result" + "Logging" 섹션 신설**: 사용자 catch ("어떤 정보가 output 으로 나오는지? log 는 어디에 기록되는지?"). `ChainResult` 8 필드 표 + happy path sample (single provider 성공 시 `output` / `usage` / `provider_used.id` / `attempts` 실제 값) + failover path sample (primary throttle 시 `attempts` 가 OverloadedError 와 fallback 모두 기록) + `chain.last_result` (contextvars-scoped) / `total_token_usage` / `total_cost` aggregate 명시. Logging 섹션은 logger 이름 (`robust_llm_chain.chain` / `robust_llm_chain.observability.langsmith`) + structured `extra` field (event / run_id / error_type 등) + "NOT logged by design" (prompt/response/credential 0 logging — SECURITY hardening #3). ARCHITECTURE.md §4 ChainResult 영역에 cross-ref 한 줄 추가.
 
 
 ### v0.2 backlog (Codex / quality round 누적 권고, 모두 의도된 미룸)

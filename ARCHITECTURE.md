@@ -251,6 +251,7 @@ ProviderSpec   (frozen, slots=True)  — credential fields use repr=False + cust
         ▼
 ChainResult    (mutable — astream stages mutate)
   input, output, usage, cost, provider_used, model_used, attempts, elapsed_ms
+  ↳ field-by-field semantics + happy/failover sample: README "Anatomy of a result"
         │
         │ contains
         ▼
