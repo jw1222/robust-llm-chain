@@ -4,6 +4,20 @@
 
 ## [Unreleased]
 
+### v0.2 backlog (Codex / quality round 누적 권고, 모두 의도된 미룸)
+- `to_safe_dict()` helper — `asdict(ChainResult)` footgun 의 안전한 직렬화 경로 (Codex R2/R3/R4 강조).
+- 명시적 `__copy__` / `__deepcopy__` — 현 `__getstate__` 동작 (credential drop) 으로 안전하나 SECURITY.md §1 명시만으로 충분.
+- `_KEY_PATTERNS` 에 LangSmith service token / AWS STS / 추가 prefix 보강 (현재 best-effort qualifier 명시).
+- sdist `.gitignore` exclude — hatchling 표준 옵션 차단 안 됨 (`force-exclude` / hatch plugin 으로 처리).
+- adapter base class 추출 — 5번째 adapter 시점.
+- richer ProviderSpec credential object 분리 — Codex challenge.
+- stream lifecycle object 추가 분리 — Codex challenge.
+- `compute_cost(pricing, usage)` signature narrowing — Codex Review R2 5min-patch (현재 `(model_spec, usage)` 가 호출처 편의 우선).
+- `env_api_key_credentials` public 노출 재검토 — Codex Review R2 (현재 외부 contributor 의 custom adapter 편의로 `__all__` 등록).
+- mixed-currency 비용 누적 정책 — Codex Review R2 (현재 LHS currency 채택, orchestrator 가 single-currency 가정).
+- `ProviderModelCreationFailed` 정의 vs raise 미사용 cleanup — Codex Q4 (minor dead code).
+- `_V02_PLACEHOLDER_TYPES` 의 redis 분류 — backend concept 인데 provider type 으로 분류, v0.2 에서 backend extra 활성 시 재고.
+
 ## [0.1.0] - 2026-04-29
 
 ### Added — v0.1 scope 확장 (Round 0 결정 변경)
@@ -38,6 +52,7 @@
 - **`from_env` unknown provider type 시 WARN log**: 이전엔 typo (`antrophic`) 같은 unknown type 을 silent skip 하다가 모든 provider 가 빠지면 `NoProvidersConfigured` raise — 사용자가 원인 모름. `robust_llm_chain.chain` 모듈 logger 에 WARN 출력 (active types 명시 + "Possible typo?") 으로 관찰성 강화. RED→GREEN 회귀 테스트 추가. Codex Round (quality) 발견.
 - **`compute_cost` → `cost.py` 분리** (SRP — single responsibility): chain.py 의 `_compute_cost` instance 메서드가 `self` 미사용 순수 함수였음 → `src/robust_llm_chain/cost.py` 로 분리. chain.py 슬림 (29줄 감소), cost 단독 단위 테스트 5개 추가 (`tests/test_cost.py`), 미래 확장 (currency 변환 / 동적 pricing 조회) 격리. 외부 사용자가 `from robust_llm_chain.cost import compute_cost` 로 직접 import 가능 (root `__all__` 미추가, 보수적). Codex Round (quality) 1시간 권고.
 - **`env_api_key_credentials` helper 공통화**: 3 adapter (anthropic / openrouter / openai) 의 `credentials_present` 가 100% 동일 패턴 (env.get(KEY) → {'api_key': value} | None). `adapters/__init__.py` 에 `env_api_key_credentials(env, env_var)` 추가, 3 adapter 가 사용. Bedrock 만 multi-field detector 라 별개. 외부 contributor 가 새 single-key adapter 만들 때 활용 가능 (`__all__` 등록). Codex Round (quality) 1시간 권고.
+- **`CostEstimate.__add__` operator + `_update_totals` 슬림** (`types.py` +12줄, `chain.py` -9줄): `CostEstimate` 에 field-wise sum 의 `__add__` dunder 추가 (LHS currency 채택, mixed-currency 는 caller 책임 — orchestrator 는 single-currency 가정). `chain.py` 의 `_update_totals` 가 6-field manual sum boilerplate 대신 operator 사용. `TokenUsage.__add__` / `__iadd__` 와 일관된 orthogonal operator 패턴 (cohesion 향상). /simplify R2 + Codex Review R2 독립 합의 발견.
 
 ### Documentation
 - **`ARCHITECTURE.md` 를 project root 로 승격** — 외부 contributor 친화적. 모듈 구조 / 의존 그래프 / 호출 lifecycle / 데이터 모델 / 에러 흐름 / public surface / 확장점 (custom ProviderAdapter / IndexBackend / fail-closed semantics) 정리. README 의 새 "Architecture" 섹션에서 링크. `pyproject.toml [tool.hatch.build.targets.sdist]` 에 포함되어 PyPI sdist 와 함께 배포.

@@ -139,6 +139,19 @@ class CostEstimate:
     total_cost: float
     currency: str = "USD"
 
+    def __add__(self, other: "CostEstimate") -> "CostEstimate":
+        """Field-wise sum. Adopts ``self.currency`` (mixed-currency aggregation
+        is the caller's responsibility — the orchestrator never mixes them).
+        """
+        return CostEstimate(
+            input_cost=self.input_cost + other.input_cost,
+            output_cost=self.output_cost + other.output_cost,
+            cache_read_cost=self.cache_read_cost + other.cache_read_cost,
+            cache_write_cost=self.cache_write_cost + other.cache_write_cost,
+            total_cost=self.total_cost + other.total_cost,
+            currency=self.currency,
+        )
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Timeout config

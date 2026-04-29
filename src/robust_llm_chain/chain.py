@@ -337,16 +337,8 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
             self._total_usage += result.usage
             if result.cost is None:
                 return
-            if self._total_cost is None:
-                self._total_cost = result.cost
-                return
-            self._total_cost = CostEstimate(
-                input_cost=self._total_cost.input_cost + result.cost.input_cost,
-                output_cost=self._total_cost.output_cost + result.cost.output_cost,
-                cache_read_cost=self._total_cost.cache_read_cost + result.cost.cache_read_cost,
-                cache_write_cost=(self._total_cost.cache_write_cost + result.cost.cache_write_cost),
-                total_cost=self._total_cost.total_cost + result.cost.total_cost,
-                currency=self._total_cost.currency,
+            self._total_cost = (
+                result.cost if self._total_cost is None else self._total_cost + result.cost
             )
 
     async def _run_with_failover(
