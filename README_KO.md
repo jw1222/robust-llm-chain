@@ -194,9 +194,11 @@ result.attempts                     # → [
 
 ## Installation & Extras
 
+> **기본으로 함께 설치되는 것:** `langchain-core>=0.3` (transitive — `Runnable` / `BaseChatModel` / `BaseMessage` / `PromptValue` / `ChatPromptTemplate` 제공). umbrella 인 `langchain` 패키지는 **의도적으로 dependency 에 포함하지 않음** — 이 라이브러리는 core abstraction 만 사용하므로 dependency footprint 를 최소로 유지. provider SDK (`langchain-anthropic` / `langchain-openai` / `langchain-aws`) 와 backend (`aiomcache`) 는 아래 extras 로 opt-in.
+
 | Command | What's included |
 |---|---|
-| `pip install robust-llm-chain` | Core 만. Adapter 없음 → `from_env()` 가 `NoProvidersConfigured` 발생 |
+| `pip install robust-llm-chain` | Core 만 — `langchain-core` 자동 설치. provider adapter 없음 → 최소 1개 extra 추가 전까지 `from_env()` 가 `NoProvidersConfigured` 발생 |
 | `pip install "robust-llm-chain[anthropic]"` | + `langchain-anthropic` (Anthropic Direct) |
 | `pip install "robust-llm-chain[openrouter]"` | + `langchain-openai` (OpenRouter — OpenAI 호환 API) |
 | `pip install "robust-llm-chain[openai]"` | + `langchain-openai` (OpenAI Direct) |

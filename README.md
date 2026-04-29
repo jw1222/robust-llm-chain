@@ -194,9 +194,11 @@ Custom logger inject: `RobustChain(providers=..., logger=my_logger)` — wire yo
 
 ## Installation & Extras
 
+> **What gets pulled in by default:** `langchain-core>=0.3` (transitive — provides `Runnable` / `BaseChatModel` / `BaseMessage` / `PromptValue` / `ChatPromptTemplate`). The umbrella `langchain` package is **intentionally NOT** a dependency — this library uses only the core abstractions, keeping the dependency footprint minimal. Provider SDKs (`langchain-anthropic` / `langchain-openai` / `langchain-aws`) and backends (`aiomcache`) are opt-in extras below.
+
 | Command | What's included |
 |---|---|
-| `pip install robust-llm-chain` | Core only. No adapters → `from_env()` raises `NoProvidersConfigured` |
+| `pip install robust-llm-chain` | Core only — `langchain-core` auto-pulled. No provider adapters, so `from_env()` raises `NoProvidersConfigured` until you add at least one extra |
 | `pip install "robust-llm-chain[anthropic]"` | + `langchain-anthropic` (Anthropic Direct) |
 | `pip install "robust-llm-chain[openrouter]"` | + `langchain-openai` (OpenRouter — OpenAI-compatible API) |
 | `pip install "robust-llm-chain[openai]"` | + `langchain-openai` (OpenAI Direct) |
