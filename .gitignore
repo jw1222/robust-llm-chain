@@ -77,6 +77,8 @@ docs/start/PRIVATE_NOTES.md
 CLAUDE.md
 AGENTS.md
 GEMINI.md
+.codex
+.gstack/
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Internal design docs — kept local, not pushed to public repo
