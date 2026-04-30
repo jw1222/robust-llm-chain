@@ -19,9 +19,11 @@
 - 8 integration + 1 e2e PASS (실제 4-provider API 회귀 보호 유지)
 - 3.11.15 로컬 검증 추가 (`uv python install 3.11` + venv full unit suite)
 
-### Docs — drift 정리 (release 전 가시성)
+### Docs — drift 정리 + As-Is + upgrade warning (R5 review 반영)
 - `README.md` / `README_KO.md` Status 섹션: "v0.1 is in active development / Python 3.13 only" → "v0.3.x in pre-1.0 active development / CI matrix Python 3.11 / 3.12 / 3.13"
-- `README.md` / `README_KO.md` line 283 ("v0.1 active providers" → "Active providers")
+- `README.md` / `README_KO.md` 본문에 남아있던 6건의 "v0.1 production combo" / "Active in v0.1" / "not implemented in v0.1" / "v0.1: Memcached, v0.2: Redis" 잔재 정리 (R5 simplify finding) — 영/한 동시
+- `README.md` / `README_KO.md` Status 섹션에 **As-Is 명시 추가**: "no support guarantee, no SLA, fork it if it doesn't work for you" (PyPI 노출 전 사용자 기대치 정렬)
+- `README.md` / `README_KO.md` Status 섹션에 **v0.2.x → v0.3.x upgrade warning callout** 추가: priority semantic 반전 + builder API 통합 BREAKING 두 가지가 PyPI long_description 에도 노출되도록 (R5 codex finding — `pip install --upgrade` 시 silent traffic shift 위험 가시화)
 - `docs/policies.md` §5.3 Python 매트릭스 표 갱신 (v0.1 ~ v0.3.0 history + v0.3.1+ 현재 + v1.0 추가 검토)
 - `CONTRIBUTING.md` / `CONTRIBUTING_KO.md` Environment setup: `uv run --python 3.11 ...` 후 `.venv` 재생성 시 dev tool 빠질 수 있다는 caveat + `uv sync --all-extras --python ...` 재실행 안내 추가
 

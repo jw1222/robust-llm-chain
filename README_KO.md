@@ -205,10 +205,10 @@ result.attempts                     # → [
 | `pip install "robust-llm-chain[openai]"` | + `langchain-openai` (OpenAI Direct) |
 | `pip install "robust-llm-chain[bedrock]"` | + `langchain-aws` (AWS Bedrock — Claude / Llama / Nova / 등) |
 | `pip install "robust-llm-chain[memcached]"` | + `aiomcache` (worker 조율 라운드 로빈용 async 클라이언트) |
-| `pip install "robust-llm-chain[anthropic,openrouter,bedrock,memcached]"` | 권장 v0.1 프로덕션 조합 (3-way Claude 페일오버) |
-| `pip install "robust-llm-chain[all]"` | v0.1 에 포함된 모든 adapter 와 backend |
+| `pip install "robust-llm-chain[anthropic,openrouter,bedrock,memcached]"` | 권장 프로덕션 조합 (3-way Claude 페일오버) |
+| `pip install "robust-llm-chain[all]"` | 현재 출시된 모든 adapter 와 backend |
 
-> `redis` backend extra 는 v0.2 에 예정 — v0.1 에서는 아직 출시 가능 상태가 아니므로 위 표에서 의도적으로 제외.
+> `redis` backend extra 는 향후 release 에 예정 — 아직 출시 가능 상태가 아니므로 위 표에서 의도적으로 제외.
 
 본 라이브러리는 `python-dotenv` 에 **의존하지 않는다**. `.env` 파일 로딩은 애플리케이션의 몫이다.
 
@@ -241,7 +241,7 @@ result.attempts                     # → [
 
 ### `from_env` 가 인식하는 환경 변수
 
-| Variable | Provider | Active in v0.1 | Notes |
+| Variable | Provider | Active | Notes |
 |---|---|---|---|
 | `ANTHROPIC_API_KEY` | anthropic | ✅ | Anthropic Direct |
 | `OPENROUTER_API_KEY` | openrouter | ✅ | OpenRouter (모든 vendor 의 model) |
@@ -265,7 +265,7 @@ result.attempts                     # → [
 | Logger 이름 | `"robust_llm_chain"` | 계층적 (예: `robust_llm_chain.stream`) |
 | Logger level | `WARNING` | 폴백 진단을 보려면 `INFO`/`DEBUG` 로 |
 | 타입 힌트 | `py.typed` 마커 동봉 | mypy/pyright 가 즉시 타입 인식 |
-| `chain.invoke()` (sync) | v0.1 미구현 | `asyncio.run()` 으로 감쌀 것 |
+| `chain.invoke()` (sync) | 미구현 | `asyncio.run()` 으로 감쌀 것 |
 
 **철학:** 환경 변수 0개, 외부 파일 0개 필수. `RobustChain(...)` 만으로 즉시 동작.
 
@@ -276,7 +276,7 @@ result.attempts                     # → [
 1. **Pending 감지를 위한 streaming first-token timeout.**
    대부분의 라이브러리는 overall timeout 하나만 가진다. Pending provider 는 그 전체 윈도우를 다 태우고 나서야 폴백한다. 본 라이브러리는 *첫 chunk* 도착을 별도로 측정하고 (default 15s), 그 예산이 끝나는 즉시 폴백한다.
 
-2. **Worker 조율 라운드 로빈.** (v0.1: Memcached, v0.2: Redis)
+2. **Worker 조율 라운드 로빈.** (현재 Memcached; pluggable `IndexBackend` 로 Redis 등 직접 구현 가능)
    다중 worker 배포 (gunicorn × 8, 등) 환경에서 대부분의 OSS 라이브러리는 라운드 로빈 인덱스를 프로세스마다 유지한다. 그러면 worker 8개일 때 동시에 8건이 동일 provider 로 떨어질 수 있다. 본 라이브러리는 인덱스를 backend (Memcached 또는 본인이 구현한 `IndexBackend`) 를 통해 공유하므로 부하가 실제로 분산된다.
 
 3. **Cross-vendor (그리고 cross-model) 페일오버.**
@@ -475,7 +475,9 @@ except ProviderTimeout as e:
 
 **v0.3.x pre-1.0 활성 개발 중.** CI 매트릭스: **Python 3.11 / 3.12 / 3.13**. Public API 는 1.0 이전에 깨질 수 있으며, 모든 변경은 [CHANGELOG.md](CHANGELOG.md) 에 기록된다 (v0.3 에서 두 BREAKING change 있었음 — 마이그레이션 노트 참조).
 
-이는 메인테이너 본인의 dogfooding 을 우선하여 최적화된 개인 프로젝트이다. 외부 기여는 환영하지만 의존하지는 않는다.
+**As-Is — 지원 보장 없음.** MIT 라이선스 하에 제공; SLA / issue 응답 일정 / 기능 요청 commitment 모두 없음. 버그는 편할 때 수정. 본인 use case 에 안 맞으면 **fork 하세요**. PR 환영하지만 의존하지 않음. 메인테이너 본인의 dogfooding 을 우선하여 최적화된 개인 프로젝트.
+
+> **⚠️ v0.2.x 에서 업그레이드?** v0.3.0 이 `priority=` semantic 을 **낮은 값이 우선** (DNS MX / cron 관행) 으로 반전했고, 4 typed `add_*` 빌더 메서드를 `add_provider(type=…)` + `add_bedrock(...)` 로 통합했습니다. v0.2 README 예시의 `priority=0` (primary 라벨) 을 그대로 복사했다면 — 실제로는 fallback 이 먼저 호출되고 있었음. v0.3 부터는 진짜 primary 로 갑니다. **업그레이드 전후 트래픽 분포 검증 필수.** 전체 마이그레이션은 [CHANGELOG.md `[0.3.0]`](CHANGELOG.md#030---2026-04-29) 참조.
 
 ---
 

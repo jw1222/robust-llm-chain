@@ -205,10 +205,10 @@ Custom logger inject: `RobustChain(providers=..., logger=my_logger)` — wire yo
 | `pip install "robust-llm-chain[openai]"` | + `langchain-openai` (OpenAI Direct) |
 | `pip install "robust-llm-chain[bedrock]"` | + `langchain-aws` (AWS Bedrock — Claude / Llama / Nova / etc.) |
 | `pip install "robust-llm-chain[memcached]"` | + `aiomcache` (async client for worker-coordinated round-robin) |
-| `pip install "robust-llm-chain[anthropic,openrouter,bedrock,memcached]"` | Recommended v0.1 production combo (3-way Claude failover) |
-| `pip install "robust-llm-chain[all]"` | Every adapter and backend shipped in v0.1 |
+| `pip install "robust-llm-chain[anthropic,openrouter,bedrock,memcached]"` | Recommended production combo (3-way Claude failover) |
+| `pip install "robust-llm-chain[all]"` | Every adapter and backend currently shipped |
 
-> A `redis` backend extra is planned for v0.2 — not yet shippable in v0.1, so the extra is intentionally absent from the list above.
+> A `redis` backend extra is planned for a future release — not yet shippable, so the extra is intentionally absent from the list above.
 
 The library does **not** depend on `python-dotenv`. Loading `.env` files is up to your application.
 
@@ -241,7 +241,7 @@ There are **three ways** to tell `RobustChain` which providers to use. They diff
 
 ### Recognized environment variables (for `from_env`)
 
-| Variable | Provider | Active in v0.1 | Notes |
+| Variable | Provider | Active | Notes |
 |---|---|---|---|
 | `ANTHROPIC_API_KEY` | anthropic | ✅ | Anthropic Direct |
 | `OPENROUTER_API_KEY` | openrouter | ✅ | OpenRouter (any vendor's model) |
@@ -265,7 +265,7 @@ There are **three ways** to tell `RobustChain` which providers to use. They diff
 | Logger name | `"robust_llm_chain"` | Hierarchical (e.g. `robust_llm_chain.stream`) |
 | Logger level | `WARNING` | Set to `INFO`/`DEBUG` for fallback diagnostics |
 | Type hints | `py.typed` marker shipped | mypy/pyright recognize types out of the box |
-| `chain.invoke()` (sync) | not implemented in v0.1 | Wrap with `asyncio.run()` |
+| `chain.invoke()` (sync) | not implemented | Wrap with `asyncio.run()` |
 
 **Philosophy:** zero environment variables, zero external files required. `RobustChain(...)` runs immediately.
 
@@ -276,7 +276,7 @@ There are **three ways** to tell `RobustChain` which providers to use. They diff
 1. **Streaming first-token timeout for pending detection.**
    Most libraries only have an overall timeout. A pending provider burns the full window before fallback. This library measures the *first chunk* arrival separately (default 15s) and falls over the moment that budget elapses.
 
-2. **Worker-coordinated round-robin.** (v0.1: Memcached, v0.2: Redis)
+2. **Worker-coordinated round-robin.** (Memcached today; pluggable `IndexBackend` for Redis or your own)
    In a multi-worker deployment (gunicorn × 8, etc.), most OSS libraries hold the round-robin index per process. With 8 workers that means 8 simultaneous requests can land on the same provider. This library shares the index through a backend (Memcached or your own implementation of `IndexBackend`) so the load actually spreads.
 
 3. **Cross-vendor (and cross-model) failover.**
@@ -475,7 +475,9 @@ Module structure, dependency graph, call lifecycle (`acall` / `ainvoke` / `astre
 
 **v0.3.x in pre-1.0 active development.** CI matrix: **Python 3.11 / 3.12 / 3.13**. Public API may break before 1.0; all changes are documented in [CHANGELOG.md](CHANGELOG.md) (v0.3 had two BREAKING changes — see migration notes there).
 
-This is a personal project optimized for the maintainer's own dogfooding. External contributions are welcome but not depended on.
+**As-Is — no support guarantee.** Provided under MIT license; no SLA, no issue-response timeline, no feature-request commitment. Bugs are fixed when convenient. If something doesn't work for your use case → **fork it**. PRs welcome but not depended on. This is a personal project optimized for the maintainer's own dogfooding.
+
+> **⚠️ Upgrading from v0.2.x?** v0.3.0 flipped `priority=` semantic to **lower-value-wins** (DNS MX / cron convention) AND consolidated 4 typed `add_*` builder methods to `add_provider(type=…)` + `add_bedrock(...)`. If you copy-pasted v0.2 README's `priority=0` (labeled primary) — your traffic was hitting fallback first. v0.3 makes it actually go to primary. **Verify your traffic distribution before/after upgrade.** Full migration in [CHANGELOG.md `[0.3.0]`](CHANGELOG.md#030---2026-04-29).
 
 ---
 
