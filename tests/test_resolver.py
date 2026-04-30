@@ -2,7 +2,12 @@
 
 The resolver combines a static provider list with an ``IndexBackend`` to
 produce a per-call attempt sequence via :meth:`ProviderResolver.iterate`.
-Priority sort + backend error propagation are the non-trivial paths.
+
+Two roles per call (v0.4.0+):
+
+* RR (over user-listed order) selects the *first* provider this call attempts.
+* Priority-sorted (lower wins) determines the *fallback* order after the first
+  provider fails — independent of RR start.
 """
 
 import asyncio
@@ -23,12 +28,12 @@ def _spec(provider_id: str, *, priority: int = 0) -> ProviderSpec:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# iterate() — round-robin starting point + wrap-around rotation
+# iterate() — RR start (user-listed) + priority-sorted fallback
 # ──────────────────────────────────────────────────────────────────────────────
 
 
 def test_iterate_advances_starting_point_per_call():
-    """Each call ticks the backend once; rotation start advances by one."""
+    """Each call ticks the backend once; RR start advances along user-listed order."""
 
     async def _run():
         providers = [_spec("a"), _spec("b"), _spec("c")]
@@ -51,15 +56,42 @@ def test_iterate_wraps_modulo_n():
     asyncio.run(_run())
 
 
-def test_iterate_returns_full_rotation_starting_at_index():
-    """One backend tick picks the start; the rest of the priority-sorted list follows."""
+def test_iterate_rr_start_then_priority_fallback():
+    """RR picks first provider; remaining follow priority order (lower wins).
+
+    With ``[A(p=0), B(p=1), C(p=2)]`` (user-listed = priority order):
+
+    * call 1 → start A, fallback [B, C] → ``[A, B, C]``
+    * call 2 → start B, fallback [A, C] → ``[B, A, C]``
+    * call 3 → start C, fallback [A, B] → ``[C, A, B]``
+    """
 
     async def _run():
         providers = [_spec("p0", priority=0), _spec("p1", priority=1), _spec("p2", priority=2)]
         resolver = ProviderResolver(providers, LocalBackend(), key="k")
         assert [s.id for s in await resolver.iterate()] == ["p0", "p1", "p2"]
-        assert [s.id for s in await resolver.iterate()] == ["p1", "p2", "p0"]
+        assert [s.id for s in await resolver.iterate()] == ["p1", "p0", "p2"]
         assert [s.id for s in await resolver.iterate()] == ["p2", "p0", "p1"]
+
+    asyncio.run(_run())
+
+
+def test_iterate_user_listed_rr_independent_of_priority():
+    """RR rotates over user-listed order; fallback uses priority order.
+
+    Builder added [B, A, C] but priority is A=0, B=1, C=2.
+    RR cycles in user-listed order (B→A→C); fallback is priority-sorted.
+    """
+
+    async def _run():
+        providers = [_spec("B", priority=1), _spec("A", priority=0), _spec("C", priority=2)]
+        resolver = ProviderResolver(providers, LocalBackend(), key="k")
+        # RR start B → fallback by priority [A, C]
+        assert [s.id for s in await resolver.iterate()] == ["B", "A", "C"]
+        # RR start A → fallback by priority [B, C]
+        assert [s.id for s in await resolver.iterate()] == ["A", "B", "C"]
+        # RR start C → fallback by priority [A, B]
+        assert [s.id for s in await resolver.iterate()] == ["C", "A", "B"]
 
     asyncio.run(_run())
 
@@ -71,7 +103,7 @@ def test_iterate_concurrent_calls_get_distinct_rotations():
     acalls could consume each other's indices and cause one call to retry
     the same provider while skipping another. ``iterate()`` ticks the
     backend exactly once per call, so each call's attempt sequence is a
-    stable rotation.
+    stable RR start + priority-ordered fallback.
     """
 
     async def _run():
@@ -82,7 +114,7 @@ def test_iterate_concurrent_calls_get_distinct_rotations():
         ids_b = [s.id for s in seq_b]
         assert sorted(ids_a) == ["a", "b"]
         assert sorted(ids_b) == ["a", "b"]
-        # Each rotation is complete (no skips) and distinct (different starting points).
+        # Each sequence is complete (no skips) and distinct (different starting points).
         assert ids_a != ids_b
 
     asyncio.run(_run())
@@ -114,8 +146,12 @@ def test_separate_keys_have_independent_indices():
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def test_priority_ascending_sorts_lower_first():
-    """Lower priority value = higher precedence (DNS MX / cron / nice convention)."""
+def test_priority_ascending_orders_fallback_lower_first():
+    """Fallback uses ascending priority (lower wins, DNS MX / cron / nice convention).
+
+    User-listed order is preserved by RR — first call's start is the first
+    user-listed spec; the fallback list is priority-sorted regardless.
+    """
 
     async def _run():
         providers = [
@@ -124,8 +160,76 @@ def test_priority_ascending_sorts_lower_first():
             _spec("secondary", priority=5),
         ]
         resolver = ProviderResolver(providers, LocalBackend(), key="k")
-        # First iterate() starts at idx 0 = lowest-priority spec in sorted list.
+        # RR start = primary (first user-listed); fallback by priority [secondary, tertiary]
         assert [s.id for s in await resolver.iterate()] == ["primary", "secondary", "tertiary"]
+        # RR start = tertiary (second user-listed); fallback by priority [primary, secondary]
+        assert [s.id for s in await resolver.iterate()] == ["tertiary", "primary", "secondary"]
+        # RR start = secondary (third user-listed); fallback by priority [primary, tertiary]
+        assert [s.id for s in await resolver.iterate()] == ["secondary", "primary", "tertiary"]
+
+    asyncio.run(_run())
+
+
+def test_iterate_dedups_by_identity_not_equality():
+    """Two ProviderSpec instances that are value-equal AND identity-distinct are both reachable.
+
+    Identity-based dedup (``p is not start``) — not ``p == start`` and not
+    ``p.id != start.id`` — is what keeps both specs reachable when a user
+    constructs duplicates that differ only in compare=False fields (api_key,
+    aws_access_key_id, aws_secret_access_key). An equality-based filter would
+    silently drop one — the test below would fail under ``p == start`` because
+    ``a1 == a2`` is True (compared fields match).
+    """
+
+    async def _run():
+        # Same id, type, model, priority → value-equal under dataclass __eq__
+        # (api_key has compare=False, so different keys don't break equality).
+        a1 = ProviderSpec(
+            id="anthropic",
+            type="fake",
+            model=ModelSpec(model_id="claude-haiku"),
+            api_key="key-1",
+            priority=0,
+        )
+        a2 = ProviderSpec(
+            id="anthropic",
+            type="fake",
+            model=ModelSpec(model_id="claude-haiku"),
+            api_key="key-2",
+            priority=0,
+        )
+        # Locks the regression contract: value-equal but identity-distinct.
+        assert a1 == a2 and a1 is not a2
+        resolver = ProviderResolver([a1, a2], LocalBackend(), key="k")
+        seq1 = await resolver.iterate()
+        seq2 = await resolver.iterate()
+        # Each call returns BOTH instances (no silent drop), in different orders.
+        assert len(seq1) == 2 and len(seq2) == 2
+        assert {id(s) for s in seq1} == {id(a1), id(a2)}
+        assert {id(s) for s in seq2} == {id(a1), id(a2)}
+        # RR start advances even though specs are value-equal.
+        assert seq1[0] is a1 and seq2[0] is a2
+
+    asyncio.run(_run())
+
+
+def test_iterate_same_priority_preserves_user_listed_order_in_fallback():
+    """Stable sort: same-priority providers keep user-listed order in fallback list."""
+
+    async def _run():
+        providers = [
+            _spec("a", priority=5),
+            _spec("b", priority=5),
+            _spec("c", priority=5),
+        ]
+        resolver = ProviderResolver(providers, LocalBackend(), key="k")
+        # All same priority → fallback follows user-listed order.
+        # call 1: start a, fallback [b, c]
+        assert [s.id for s in await resolver.iterate()] == ["a", "b", "c"]
+        # call 2: start b, fallback [a, c]
+        assert [s.id for s in await resolver.iterate()] == ["b", "a", "c"]
+        # call 3: start c, fallback [a, b]
+        assert [s.id for s in await resolver.iterate()] == ["c", "a", "b"]
 
     asyncio.run(_run())
 

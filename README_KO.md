@@ -2,9 +2,9 @@
 
 > 🇰🇷 한국어 번역. 원본은 [README.md](https://github.com/jw1222/robust-llm-chain/blob/main/README.md) 참조 — 원본이 정본이며, 번역과 원본이 다를 시 원본 우선.
 
-<!-- CI 배지는 Phase 3 에서 .github/workflows/ci.yml 가 준비되면 활성화 예정 -->
-[![CI](https://img.shields.io/badge/CI-pending-lightgrey.svg)](https://github.com/jw1222/robust-llm-chain/actions)
-[![PyPI](https://img.shields.io/badge/PyPI-0.3.1-blue.svg)](https://pypi.org/project/robust-llm-chain/)
+[![CI](https://github.com/jw1222/robust-llm-chain/actions/workflows/ci.yml/badge.svg)](https://github.com/jw1222/robust-llm-chain/actions/workflows/ci.yml)
+<!-- PyPI publish 보류 중 (Status 섹션 참조). 아래 live badge 는 첫 publish 전까지 "no releases" 표시 후, publish 시점에 자동 동기화. -->
+[![PyPI](https://img.shields.io/pypi/v/robust-llm-chain.svg)](https://pypi.org/project/robust-llm-chain/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/jw1222/robust-llm-chain/blob/main/LICENSE)
 
@@ -56,14 +56,14 @@ chain = (
     .add_provider(
         type="anthropic",
         model="claude-haiku-4-5-20251001",
-        api_key=os.environ["ANTHROPIC_API_KEY"],   # primary
-        priority=0,
+        api_key=os.environ["ANTHROPIC_API_KEY"],
+        priority=0,                                # fallback 우선 타겟
     )
     .add_provider(
         type="openrouter",
         model="anthropic/claude-haiku-4.5",
-        api_key=os.environ["OPENROUTER_API_KEY"],  # fallback
-        priority=1,
+        api_key=os.environ["OPENROUTER_API_KEY"],
+        priority=1,                                # fallback 우선순위 낮음 — 단, RR 가 교대로 첫 시도 provider 로 선택
     )
     .build()
 )
@@ -76,9 +76,9 @@ print(f"used: {result.provider_used.id} | tokens: {result.usage}") # metadata
 > 표준 Runnable `ainvoke()` 는 `BaseMessage` 만 반환한다 (LangChain 합성용). `attempts`, `cost`, `usage` 까지 한 번에 받으려면 `acall()` 을 사용하거나 `chain.last_result` 를 읽어라.
 
 **무슨 일이 일어나는가:**
-- fluent builder 로 두 provider 설정: Anthropic Direct (primary, `priority=0`) 와 폴백용 OpenRouter (`priority=1`).
+- fluent builder 로 두 provider 설정: Anthropic Direct 와 OpenRouter — **둘 다 활성 페일오버 경로**. **Round-robin** 이 매 호출의 *첫* 시도를 두 provider 에 분산 (call 1 은 Anthropic 부터, call 2 는 OpenRouter 부터, …). **Priority** 는 첫 provider 실패 *후* fallback 순서를 결정 — `priority=0` (Anthropic) 가 `priority=1` (OpenRouter) 보다 먼저 시도. 두 역할 표는 [Provider 설정](#provider-설정--세-가지-path) 참조.
 - credential 은 **값** 으로 전달 (`api_key=...`). 그 값을 어디서 가져올지 — env var, secrets manager, Vault — 는 호출자 책임. builder 는 `os.environ` 을 절대 직접 읽지 않으므로 source 가 호출 site 에 명시적으로 드러난다.
-- Anthropic 이 529 / overloaded / pending 에 걸리면 요청은 OpenRouter 로 투명하게 페일오버된다. 추가 설정 없음.
+- 첫 시도 provider 가 529 / overloaded / pending 에 걸리면 요청은 priority 순 fallback sequence 의 다음 provider 로 투명하게 페일오버된다 (`priority` 가 가장 낮은 쪽 우선 — 첫 시도가 어느 provider 였든 무관). 추가 설정 없음.
 - env var 누락 시 → `os.environ["..."]` 가 정확한 var 이름과 함께 `KeyError` 를 던진다 (Python 표준 fail-fast).
 
 **기본값:** single-worker / `pricing=None` / `backend=LocalBackend()`. multi-worker 라운드 로빈, 비용 계산, multi-key / multi-region 패턴은 아래 [Provider 설정](#provider-설정--세-가지-path) 와 [Advanced usage](#advanced-usage) 참조.
@@ -237,7 +237,14 @@ result.attempts                     # → [
 - **"multi-key / multi-region / cross-vendor / 명시 priority"** → **`RobustChain.builder()`** (대부분 production 권장). [`examples/builder.py`](https://github.com/jw1222/robust-llm-chain/blob/main/examples/builder.py) 참조.
 - "다른 코드에서 `ProviderSpec` 인스턴스를 이미 만들고 있어 (config loader, orchestrator)" → 명시 `providers=[ProviderSpec(...)]` list. 아래 [Advanced usage](#advanced-usage) 섹션의 inline 코드 참조.
 
-> **`priority=` 의미:** 낮은 값이 우선 (DNS MX / cron / Linux `nice` 관행). `priority=0` 이 primary, 동률이면 사용자가 추가한 순서 보존.
+> **두 역할 트래픽 모델 (v0.4.0+):**
+>
+> | 역할 | 무엇을 결정하는가 | 적용 시점 |
+> |---|---|---|
+> | **Round-robin** | 이번 호출의 *첫* provider (사용자 추가 순서 위에서 회전) | 호출 시작 시, 매 호출 |
+> | **Priority** | 첫 provider 실패 후 *fallback* 순서 (낮은 값이 우선) | 첫 시도 실패 시 |
+>
+> `priority=` 낮은 값이 우선 (DNS MX / cron / Linux `nice` 관행), 동률이면 사용자가 추가한 순서 보존. `[A(p=0), B(p=1), C(p=2)]` 예시: 호출 1 = `A→B→C`, 호출 2 = `B→A→C`, 호출 3 = `C→A→B`. RR 은 첫 시도 트래픽을 분산하고, priority 는 실패 후 누가 받을지 결정.
 
 ### `from_env` 가 인식하는 환경 변수
 
@@ -473,10 +480,12 @@ except ProviderTimeout as e:
 
 ## Status
 
-**v0.3.x pre-1.0 활성 개발 중.** CI 매트릭스: **Python 3.11 / 3.12 / 3.13**. Public API 는 1.0 이전에 깨질 수 있으며, 모든 변경은 [CHANGELOG.md](https://github.com/jw1222/robust-llm-chain/blob/main/CHANGELOG.md) 에 기록된다 (v0.3 에서 두 BREAKING change 있었음 — 마이그레이션 노트 참조).
+**v0.4.x pre-1.0 활성 개발 중.** CI 매트릭스: **Python 3.11 / 3.12 / 3.13**. Public API 는 1.0 이전에 깨질 수 있으며, 모든 변경은 [CHANGELOG.md](https://github.com/jw1222/robust-llm-chain/blob/main/CHANGELOG.md) 에 기록된다 (v0.3 과 v0.4 각각 failover semantic 의 BREAKING change 가 있음 — 마이그레이션 노트 참조).
 
 **As-Is — 지원 보장 없음.** MIT 라이선스 하에 제공; SLA / issue 응답 일정 / 기능 요청 commitment 모두 없음. 버그는 편할 때 수정. 본인 use case 에 안 맞으면 **fork 하세요**. PR 환영하지만 의존하지 않음. 메인테이너 본인의 dogfooding 을 우선하여 최적화된 개인 프로젝트.
 
+> **⚠️ v0.3.x 에서 업그레이드?** v0.4.0 이 **round-robin** 과 **priority** 를 두 개의 별개 역할로 분리했습니다: RR 은 이번 호출의 *첫* provider 를 사용자 추가 순서 위에서 선택, priority 는 첫 provider 실패 후 *fallback 순서* 결정. v0.3 은 단일 priority-sorted *rotation* 이라 fallback 순서가 매 호출마다 회전과 함께 바뀌었습니다. v0.4 부터 fallback 은 항상 priority 를 따릅니다. **v0.3 과 호출 순서가 달라지는 경우**: 사용자 추가 순서가 priority 정렬 순서와 다르면 변함 (priority 가 일치해도 첫 provider 가 실패한 호출에서는 fallback 순서가 변함). 진정한 no-op 은 `n=1` (provider 1개) 뿐. [CHANGELOG `[0.4.0]`](https://github.com/jw1222/robust-llm-chain/blob/main/CHANGELOG.md#040---2026-04-30) 마이그레이션 표 참조. **N 무관 — 업그레이드 전 트래픽 분포 + fallback 순서 검증 필수.**
+>
 > **⚠️ v0.2.x 에서 업그레이드?** v0.3.0 이 `priority=` semantic 을 **낮은 값이 우선** (DNS MX / cron 관행) 으로 반전했고, 4 typed `add_*` 빌더 메서드를 `add_provider(type=…)` + `add_bedrock(...)` 로 통합했습니다. v0.2 README 예시의 `priority=0` (primary 라벨) 을 그대로 복사했다면 — 실제로는 fallback 이 먼저 호출되고 있었음. v0.3 부터는 진짜 primary 로 갑니다. **업그레이드 전후 트래픽 분포 검증 필수.** 전체 마이그레이션은 [CHANGELOG.md `[0.3.0]`](https://github.com/jw1222/robust-llm-chain/blob/main/CHANGELOG.md#030---2026-04-29) 참조.
 
 ---

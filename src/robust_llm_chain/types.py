@@ -25,6 +25,12 @@ from langchain_core.prompt_values import PromptValue
 #: ``type X = ...`` to keep the package importable on Python 3.11.
 RobustChainInput: TypeAlias = str | PromptValue | list[BaseMessage]
 
+#: Where a ``ProviderAttempt`` was occurring when it ended (success or error).
+#: Single SSoT for ``AttemptRecord.phase`` and the ``_record_attempt`` helper —
+#: keeps the orchestrator's ``phase=`` argument typing aligned with the
+#: dataclass field, removing the prior ``# type: ignore[arg-type]`` cast.
+AttemptPhase: TypeAlias = Literal["model_creation", "first_token", "stream", "post_processing"]
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Pricing / Model / Provider
@@ -187,7 +193,7 @@ class AttemptRecord:
     provider_id: str
     provider_type: str
     model_id: str
-    phase: Literal["model_creation", "first_token", "stream", "post_processing"]
+    phase: AttemptPhase
     elapsed_ms: float
     error_type: str | None
     error_message: str | None

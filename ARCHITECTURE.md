@@ -145,8 +145,9 @@ chain.{ainvoke|astream|acall}                         entry
 3. asyncio.wait_for(total_timeout)                    total = per_provider × N + 60s, cap 360s
     │
     ▼
-4. attempt_order = await resolver.iterate()           one IndexBackend tick → priority-sorted
-                                                      rotation (each provider exactly once)
+4. attempt_order = await resolver.iterate()           one IndexBackend tick → RR start (over
+                                                      user-listed order) + priority-sorted
+                                                      fallback (each provider exactly once)
    for spec in attempt_order:
        a. model = adapter.build(spec).bind(           per-call max_tokens / temperature
                        max_tokens=..., temperature=...)

@@ -2,9 +2,10 @@
 
 Implements LangChain ``Runnable`` (``ainvoke`` / ``astream``) plus a
 convenience ``acall`` that returns ``ChainResult`` directly. Failover
-rotates across configured providers via ``ProviderResolver`` +
-``IndexBackend`` (one backend tick per call picks the start; rotation
-is priority-sorted with each provider tried at most once); streaming
+fans out across configured providers via ``ProviderResolver`` +
+``IndexBackend`` — one backend tick per call picks the *starting*
+provider (RR over user-listed order); the *fallback sequence* follows in
+priority order (lower wins), each provider tried at most once. Streaming
 details (first-token timeout, bounded cleanup) live in ``StreamExecutor``.
 """
 
@@ -44,6 +45,7 @@ from robust_llm_chain.errors import (
 from robust_llm_chain.resolver import ProviderResolver
 from robust_llm_chain.stream import StreamExecutor, _accumulate_usage
 from robust_llm_chain.types import (
+    AttemptPhase,
     AttemptRecord,
     ChainResult,
     CostEstimate,
@@ -351,7 +353,7 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
     def _record_attempt(
         self,
         spec: ProviderSpec,
-        phase: str,
+        phase: AttemptPhase,
         start: float,
         exc: BaseException | None,
         eligible: bool,
@@ -361,7 +363,7 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
             provider_id=spec.id,
             provider_type=spec.type,
             model_id=spec.model.model_id,
-            phase=phase,  # type: ignore[arg-type]
+            phase=phase,
             elapsed_ms=elapsed_ms,
             error_type=type(exc).__name__ if exc is not None else None,
             error_message=sanitize_message(str(exc)) if exc is not None else None,
@@ -421,7 +423,16 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
                 output, usage = await self._executor.collect(model, messages)
             except Exception as exc:
                 eligible = is_fallback_eligible(exc)
-                attempts.append(self._record_attempt(spec, "stream", attempt_start, exc, eligible))
+                # Preserve the timeout phase ('first_token' vs 'stream') the
+                # StreamExecutor reported instead of always recording 'stream'
+                # — first-token detection is the library's headline feature
+                # and must show up accurately in attempt metadata/logs.
+                phase = (
+                    exc.phase
+                    if isinstance(exc, ProviderTimeout) and exc.phase in ("first_token", "stream")
+                    else "stream"
+                )
+                attempts.append(self._record_attempt(spec, phase, attempt_start, exc, eligible))
                 last_error = exc
                 if eligible:
                     continue

@@ -1,8 +1,8 @@
 # robust-llm-chain
 
-<!-- CI badge will be enabled in Phase 3 once .github/workflows/ci.yml is in place -->
-[![CI](https://img.shields.io/badge/CI-pending-lightgrey.svg)](https://github.com/jw1222/robust-llm-chain/actions)
-[![PyPI](https://img.shields.io/badge/PyPI-0.3.1-blue.svg)](https://pypi.org/project/robust-llm-chain/)
+[![CI](https://github.com/jw1222/robust-llm-chain/actions/workflows/ci.yml/badge.svg)](https://github.com/jw1222/robust-llm-chain/actions/workflows/ci.yml)
+<!-- PyPI publish is intentionally deferred (see Status section). The live badge below renders "no releases" until the first publish lands and auto-syncs after. -->
+[![PyPI](https://img.shields.io/pypi/v/robust-llm-chain.svg)](https://pypi.org/project/robust-llm-chain/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/jw1222/robust-llm-chain/blob/main/LICENSE)
 
@@ -56,14 +56,14 @@ chain = (
     .add_provider(
         type="anthropic",
         model="claude-haiku-4-5-20251001",
-        api_key=os.environ["ANTHROPIC_API_KEY"],   # primary
-        priority=0,
+        api_key=os.environ["ANTHROPIC_API_KEY"],
+        priority=0,                                # preferred fallback target
     )
     .add_provider(
         type="openrouter",
         model="anthropic/claude-haiku-4.5",
-        api_key=os.environ["OPENROUTER_API_KEY"],  # fallback
-        priority=1,
+        api_key=os.environ["OPENROUTER_API_KEY"],
+        priority=1,                                # lower fallback preference; still RR-selected on alternate calls
     )
     .build()
 )
@@ -76,9 +76,9 @@ print(f"used: {result.provider_used.id} | tokens: {result.usage}") # metadata
 > The standard Runnable `ainvoke()` returns just a `BaseMessage` (for LangChain composition). To get `attempts`, `cost`, and `usage` in one call, use `acall()` or read `chain.last_result`.
 
 **What happens:**
-- Two providers configured via the fluent builder: Anthropic Direct (primary, `priority=0`) and OpenRouter as fallback (`priority=1`).
+- Two providers configured via the fluent builder: Anthropic Direct and OpenRouter — both active failover paths. **Round-robin** distributes the *first* attempt of each call across them (call 1 starts on Anthropic, call 2 on OpenRouter, …). **Priority** decides the *fallback* order *after* the first provider fails — `priority=0` (Anthropic) is tried before `priority=1` (OpenRouter). See [Provider configuration](#provider-configuration--three-paths) for the two-role table.
 - Credentials are passed as values (`api_key=...`). Where the value comes from — env var, secrets manager, Vault — is your call. The builder never reads `os.environ` on your behalf, so the source is explicit at the call site.
-- If Anthropic returns 529 / overloaded / pending, the request transparently fails over to OpenRouter. No additional configuration.
+- If the first-attempt provider returns 529 / overloaded / pending, the request transparently fails over to the next provider in the priority-ordered fallback sequence (lowest `priority` first, regardless of which provider was attempted first). No additional configuration.
 - Missing env var → `os.environ["..."]` raises `KeyError` with the exact var name (Python's standard fail-fast).
 
 **Defaults:** single-worker / `pricing=None` / `backend=LocalBackend()`. For multi-worker round-robin, cost computation, or multi-key / multi-region patterns, see [Provider configuration](#provider-configuration--three-paths) and [Advanced usage](#advanced-usage) below.
@@ -237,7 +237,14 @@ There are **three ways** to tell `RobustChain` which providers to use. They diff
 - **"Need multi-key / multi-region / cross-vendor / explicit priority"** → **`RobustChain.builder()`** (recommended for most production). See [`examples/builder.py`](https://github.com/jw1222/robust-llm-chain/blob/main/examples/builder.py).
 - "Already constructing `ProviderSpec` instances elsewhere in code (config loader, orchestrator)" → explicit `providers=[ProviderSpec(...)]` list. See the inline code in [Advanced usage](#advanced-usage) below.
 
-> **`priority=` semantics:** lower value wins (DNS MX / cron / Linux `nice` convention). `priority=0` is the primary; ties preserve user-listed order.
+> **Two-role traffic model (v0.4.0+):**
+>
+> | Role | What it controls | When it kicks in |
+> |---|---|---|
+> | **Round-robin** | Which provider this call attempts *first* (over user-listed order) | Call start, every call |
+> | **Priority** | Order of *fallback* attempts after the first provider fails (lower wins) | Only when first attempt fails |
+>
+> `priority=` lower value wins (DNS MX / cron / Linux `nice` convention); ties preserve user-listed order. Example with `[A(p=0), B(p=1), C(p=2)]`: call 1 = `A→B→C`, call 2 = `B→A→C`, call 3 = `C→A→B`. RR distributes initial-attempt load; priority decides who picks up after a failure.
 
 ### Recognized environment variables (for `from_env`)
 
@@ -473,10 +480,12 @@ Module structure, dependency graph, call lifecycle (`acall` / `ainvoke` / `astre
 
 ## Status
 
-**v0.3.x in pre-1.0 active development.** CI matrix: **Python 3.11 / 3.12 / 3.13**. Public API may break before 1.0; all changes are documented in [CHANGELOG.md](https://github.com/jw1222/robust-llm-chain/blob/main/CHANGELOG.md) (v0.3 had two BREAKING changes — see migration notes there).
+**v0.4.x in pre-1.0 active development.** CI matrix: **Python 3.11 / 3.12 / 3.13**. Public API may break before 1.0; all changes are documented in [CHANGELOG.md](https://github.com/jw1222/robust-llm-chain/blob/main/CHANGELOG.md) (v0.3 and v0.4 each shipped a BREAKING failover-semantic change — see migration notes there).
 
 **As-Is — no support guarantee.** Provided under MIT license; no SLA, no issue-response timeline, no feature-request commitment. Bugs are fixed when convenient. If something doesn't work for your use case → **fork it**. PRs welcome but not depended on. This is a personal project optimized for the maintainer's own dogfooding.
 
+> **⚠️ Upgrading from v0.3.x?** v0.4.0 splits **round-robin** and **priority** into two distinct roles: RR picks the *first* provider this call attempts (over user-listed order); priority orders the *fallback sequence* after that first provider fails. v0.3 used a single priority-sorted *rotation*, so fallback order shifted every call. v0.4 makes fallback always honor priority. **Attempt sequences differ from v0.3** whenever your user-listed order does not match priority-sorted order (and even when it does, fallback order changes for any call where the first provider fails). The only no-op case is `n=1` (one provider). See [CHANGELOG `[0.4.0]`](https://github.com/jw1222/robust-llm-chain/blob/main/CHANGELOG.md#040---2026-04-30) for the migration table. **Verify your traffic and fallback ordering before upgrading, regardless of N.**
+>
 > **⚠️ Upgrading from v0.2.x?** v0.3.0 flipped `priority=` semantic to **lower-value-wins** (DNS MX / cron convention) AND consolidated 4 typed `add_*` builder methods to `add_provider(type=…)` + `add_bedrock(...)`. If you copy-pasted v0.2 README's `priority=0` (labeled primary) — your traffic was hitting fallback first. v0.3 makes it actually go to primary. **Verify your traffic distribution before/after upgrade.** Full migration in [CHANGELOG.md `[0.3.0]`](https://github.com/jw1222/robust-llm-chain/blob/main/CHANGELOG.md#030---2026-04-29).
 
 ---

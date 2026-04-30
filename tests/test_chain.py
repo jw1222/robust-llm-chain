@@ -131,6 +131,41 @@ def test_acall_all_providers_fail_raises_all_failed():
     asyncio.run(_run())
 
 
+def test_acall_first_token_timeout_records_phase_first_token_not_stream():
+    """Non-streaming acall preserves the StreamExecutor's 'first_token' phase
+    in AttemptRecord — does not collapse it to 'stream'.
+
+    Regression for the chain.py:_failover_loop hardcoded 'stream' phase that
+    masked first-token timeout from operational logs/metrics. First-token
+    detection is a headline feature; attempt metadata must reflect it.
+    """
+
+    async def _run():
+        adapter = _setup()
+        # delay > first_token timeout forces ProviderTimeout(phase='first_token')
+        adapter.set_response("p1", chunks=["x"], delay=1.0)
+        adapter.set_response("p2", text="recovered")
+        chain = RobustChain(
+            providers=[_fake_spec("p1"), _fake_spec("p2")],
+            timeouts=TimeoutConfig(
+                per_provider=2.0, first_token=0.05, total=10.0, stream_cleanup=0.5
+            ),
+        )
+
+        result = await chain.acall("hi")
+
+        assert result.output.content == "recovered"
+        assert result.provider_used.id == "p2"
+        assert len(result.attempts) == 2
+        assert result.attempts[0].error_type == "ProviderTimeout"
+        assert result.attempts[0].phase == "first_token"
+        assert result.attempts[0].fallback_eligible is True
+        assert result.attempts[1].phase == "stream"
+        assert result.attempts[1].error_type is None
+
+    asyncio.run(_run())
+
+
 def test_acall_total_timeout_raises_provider_timeout_phase_total():
     async def _run():
         adapter = _setup()

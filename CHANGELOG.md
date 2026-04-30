@@ -4,6 +4,76 @@
 
 ## [Unreleased]
 
+### v0.5 backlog — 외부 senior review (2026-04-30) 후속
+
+- **adapter build 오류 표준화**: `ProviderModelCreationFailed` (errors.py:37) 가 정의만 있고 raise 0건. SDK validation/config 오류가 raw exception 으로 새는 상태. `chain._build_model` 에서 wrap 적용. wrap 대상 exception 범위는 v0.5 설계 시 결정. v0.2 backlog #11 과 동일.
+- **observability hookup**: `observability/langsmith.py::cleanup_run` 헬퍼는 정의되어 있으나 `chain.py` failover loop 에서 호출 0건 + `_record_attempt(run_id=None)` hardcode. 적용하려면 `RunnableConfig` 에서 run_id 추출 패턴 정립 필요. LangSmith 자동 트레이싱은 작동 (Runnable 호환) 하나 fallback 발생 시 pending run cleanup 안 됨.
+- **version SSoT** (`pyproject.toml:7` + `__init__.py:23` 중복 → hatchling-vcs 같은 dynamic version): release 자동화와 묶어서 처리.
+
+## [0.4.0] - 2026-04-30
+
+### Changed (BREAKING) — Failover semantic: RR start + priority-ordered fallback
+
+`ProviderResolver.iterate()` 가 두 역할을 명확히 분리:
+
+* **Round-robin** — 이번 호출의 *첫* provider 를 선택 (사용자 추가 순서 위에서 회전).
+* **Priority** — 첫 provider 실패 후 *fallback 순서* 결정 (낮은 값이 우선, 호출마다 동일).
+
+이전 (v0.3.x): priority-sorted 단일 리스트를 RR index 만큼 회전 (`providers[start:] + providers[:start]`). 결과적으로 **fallback 순서가 매 호출마다 회전과 함께 바뀜** — provider 들이 서로 다른 priority 를 가질 때 fallback 은 엄밀히 priority-sorted 가 아니었음.
+
+예시 (`[A(p=0), B(p=1), C(p=2)]`):
+
+| Call | v0.3 (회전) | v0.4 (RR start + priority fallback) |
+|---|---|---|
+| 1 | `A → B → C` | `A → B → C` |
+| 2 | `B → C → A` | `B → A → C` |
+| 3 | `C → A → B` | `C → A → B` |
+
+호출 2 에서 차이 — v0.3 은 `B` 실패 시 `C` 로 폴백 (rotation 순), v0.4 는 `A` 로 폴백 (priority 순). v0.4 가 "fallback 은 항상 priority 가 낮은 쪽으로" 라는 일반적/직관적 LB 정의와 일치.
+
+**왜 v0.4 인가**: 사용자 dogfooding 에서 의도된 정책이 "RR = 트래픽 분산, Priority = 폴백 선호 순서" 인데 v0.3.x 구현은 priority 가 정렬 보조 역할만 하고 fallback 단계에서 의미가 사라지는 회전이었음을 발견. 코드가 documented intent 와 다르고, 회전 의미는 documentation 에만 명시되어 있던 부수 효과.
+
+**마이그레이션**:
+- 진정한 no-op 은 **`n=1` (provider 1개)** 뿐.
+- **`n=2`**: 사용자 추가 순서가 priority 순서와 일치하면 (예: `[A(p=0), B(p=1)]`) v0.3/v0.4 동일. **다르면 swap** — 예: 사용자가 `[B(p=1), A(p=0)]` 로 추가하면 v0.3 호출 1 = `[A,B]` (priority-sorted rotation), v0.4 호출 1 = `[B,A]` (RR start = user-listed 첫 항목 B + priority fallback `[A]`).
+- **`n≥3`**: priority 가 모두 같아도 fallback 순서가 변함. 예시 `[A,B,C]` 모두 priority=0, 호출 2 에서 v0.3 = `[B,C,A]` (rotation), v0.4 = `[B,A,C]` (RR-start B + priority-sorted fallback `[A,C]`).
+- **공통**: RR 첫 시도 분산은 v0.3/v0.4 모두 균등 (트래픽 총량 변화 없음). **변화는 fallback 순서**.
+- 위 두 차이를 `tests/test_resolver.py::test_iterate_user_listed_rr_independent_of_priority` (n=3, user-listed ≠ priority) + `test_iterate_same_priority_preserves_user_listed_order_in_fallback` (n=3, all p=0) 가 회귀 보호.
+- N 무관 — 본인 use case 의 traffic + fallback ordering 을 release 전 직접 확인 권장.
+
+### Changed — Resolver 내부 표현
+- `ProviderResolver.__init__` 에 `_providers` (user-listed) 와 `_priority_sorted` (fallback view) 두 list 보유. 이전에는 priority-sorted 만 보유 + 회전.
+- `iterate()` 가 ProviderSpec identity (`is`) 로 RR-start 와 fallback 분리 — duplicate `id` 중복 방지 강제 없는 환경에서도 안전.
+
+### Tests — `tests/test_resolver.py` 회전 가정 → start+fallback 가정 재작성
+- `test_iterate_returns_full_rotation_starting_at_index` → `test_iterate_rr_start_then_priority_fallback` (semantic 명시)
+- `test_iterate_user_listed_rr_independent_of_priority` 신규 — RR base = user-listed 회귀 보호 (priority 와 user-listed 가 다를 때)
+- `test_iterate_same_priority_preserves_user_listed_order_in_fallback` 신규 — 동률 stable sort 회귀 보호
+- `test_priority_ascending_sorts_lower_first` → `test_priority_ascending_orders_fallback_lower_first` (사실 더 정확한 이름) + 3개 호출 검증으로 확장
+- `test_chain.py` 29 unit 영향 없음 (모두 default `priority=0` 동률, user-listed = priority-sorted 으로 동등)
+
+### Fixed — AttemptRecord.phase 정확도 (외부 senior review 후속)
+- `chain._failover_loop` 가 non-streaming `acall` 경로에서 모든 collect() 예외를 `phase="stream"` 으로 hardcode 기록하던 문제 수정. `ProviderTimeout(phase="first_token")` 가 raise 되면 이제 `AttemptRecord.phase = "first_token"` 로 정확히 surface — first-token timeout 이 라이브러리의 핵심 차별점인데 attempt metadata 가 이를 가리던 정확도 결함.
+- 회귀 보호: `tests/test_chain.py::test_acall_first_token_timeout_records_phase_first_token_not_stream`.
+
+### Fixed — README CI / PyPI badge stale
+- CI badge 가 `CI-pending-lightgrey` placeholder 였음 (`.github/workflows/ci.yml` 은 v0.3 부터 존재). 실제 GitHub Actions workflow status badge 로 교체 (영/한 동시).
+- PyPI badge: 정적 `0.4.0` → live `pypi/v/robust-llm-chain.svg`. release 진행 상황과 자동 동기화 + publish 안 된 시점에 misleading 한 정적 버전 표시 제거 (R-ext1 codex finding).
+
+### Refactor — `AttemptPhase` Literal alias 도입 (R-ext1 codex Important)
+- `AttemptRecord.phase` Literal 을 `types.AttemptPhase` alias 로 SSoT 화 + `chain._record_attempt` signature 가 `phase: AttemptPhase` 로 강화. 기존 `phase: str` widening + `# type: ignore[arg-type]` 제거. mypy 가 이제 잘못된 phase 값 (예: `"total"`) 의 `_record_attempt` 호출을 컴파일 시점에 차단.
+
+### Validation
+- 211 unit pass (3.13 + 3.12 + 3.11 venv) / mypy strict 0 / ruff 0 / format 0
+- 8 integration + 1 e2e PASS (실제 API 회귀 보호 유지)
+
+### Docs
+- `README.md` / `README_KO.md` `priority=` 단일 문장 설명 → **두 역할 트래픽 모델 표** (RR / Priority + 적용 시점) + `[A,B,C]` 회귀 예시 추가.
+- `README.md` / `README_KO.md` Status 섹션에 **v0.3.x → v0.4.0 upgrade warning callout** 추가 — silent fallback-order shift 위험 가시화 (v0.2 → v0.3 priority swap callout 옆에 누적 표시).
+- `ARCHITECTURE.md` §3.1 lifecycle 다이어그램 step 4 코멘트: "priority-sorted rotation" → "RR start (over user-listed order) + priority-sorted fallback".
+- `src/robust_llm_chain/resolver.py` module + class + method docstring 전면 재작성 — 두 역할 분리 + cycle 예시 명시.
+- `src/robust_llm_chain/chain.py` module docstring 회전 표현 정정.
+
 ## [0.3.1] - 2026-04-30
 
 ### Changed — Python 3.11 / 3.12 지원 추가 (additive, non-breaking)

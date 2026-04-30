@@ -147,8 +147,9 @@ chain.{ainvoke|astream|acall}                         진입
 3. asyncio.wait_for(total_timeout)                    total = per_provider × N + 60s, 360s 상한
     │
     ▼
-4. attempt_order = await resolver.iterate()           한 번의 IndexBackend tick → priority
-                                                      sorted rotation (각 provider 정확히 1회)
+4. attempt_order = await resolver.iterate()           한 번의 IndexBackend tick → RR start (사용자
+                                                      추가 순서) + priority-sorted fallback
+                                                      (각 provider 정확히 1회)
    for spec in attempt_order:
        a. model = adapter.build(spec).bind(           호출별 max_tokens / temperature
                        max_tokens=..., temperature=...)
