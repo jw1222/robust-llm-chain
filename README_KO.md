@@ -453,6 +453,7 @@ print(chain.last_result.attempts, chain.last_result.cost)
 ```python
 from robust_llm_chain.errors import (
     AllProvidersFailed, ProviderTimeout, FallbackNotApplicable, BackendUnavailable,
+    ProviderInactive, ProviderModelCreationFailed,
 )
 
 try:
@@ -460,6 +461,10 @@ try:
 except BackendUnavailable as e:
     # Memcached down — LocalBackend 로 명시적 전환하거나 요청 실패 처리
     log.error("backend unavailable", extra={"error": str(e)})
+except ProviderInactive:
+    # adapter extras 미설치 (예: `pip install robust-llm-chain[anthropic]` 누락)
+    # 환경 셋팅 문제 — transient 아님. fail-fast.
+    raise
 except FallbackNotApplicable:
     # auth 에러 또는 parser 실패 — 재시도해봐야 의미 없음
     raise
@@ -469,6 +474,8 @@ except AllProvidersFailed as e:
 except ProviderTimeout as e:
     log.error(f"total timeout in phase={e.phase}")
 ```
+
+> **Adapter build 오류** (`ProviderModelCreationFailed`, v0.4.1+): `adapter.build()` 가 raise 한 raw SDK / config exception (예: `ValueError("model id wrong")`, `botocore.errorfactory.ValidationException`) 은 모두 `ProviderModelCreationFailed` 로 wrap. 외부 caller 는 vendor-specific exception 대신 단일 typed contract 만 catch 하면 됨. 원본 raw exception 은 `__cause__` 에 보존. wrap 된 에러는 **fallback eligible** — multi-provider fault tolerance 가 한 vendor 의 config 오류를 "다음 provider 시도" 로 처리. 영구 broken provider 는 다른 provider 가 성공하는 한 silent 하게 가려짐 → **`ChainResult.attempts` 에서 `phase == "model_creation"` 발생률 모니터링 권장** (만성 config drift 감지). 모든 provider 가 실패하면 `AllProvidersFailed` 로 surface.
 
 ---
 

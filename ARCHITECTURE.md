@@ -151,6 +151,12 @@ chain.{ainvoke|astream|acall}                         entry
    for spec in attempt_order:
        a. model = adapter.build(spec).bind(           per-call max_tokens / temperature
                        max_tokens=..., temperature=...)
+                                                      raw SDK exceptions wrapped into
+                                                      ProviderModelCreationFailed (typed contract,
+                                                      __cause__ preserved, fallback-eligible).
+                                                      Other RobustChainError subclasses
+                                                      (ProviderInactive / BackendUnavailable / …)
+                                                      pass through untouched.
        b. output, usage = await executor.collect(...) Phase 1: first_token wait
                                                       Phase 2: chunk pump (per_provider deadline)
                                                       Phase 3: bounded aclose() cleanup
@@ -295,7 +301,10 @@ RobustChainError                                    (base)
 ├── NoProvidersConfigured                           # zero active providers
 ├── ProviderInactive                                # extras installed, adapter not active in this version
 ├── ProviderTimeout(phase=…)                        # library-imposed timeout (first_token / stream / total / model_creation)
-├── ProviderModelCreationFailed                     # adapter.build threw
+├── ProviderModelCreationFailed                     # adapter.build raised — raw SDK / config
+│                                                     errors wrapped here (v0.4.1+); fallback-eligible
+│                                                     so other vendors are still tried. __cause__
+│                                                     preserves the original raw exception.
 ├── ModelDeprecated                                 # provider says model is sunsetting
 ├── ModelNotFound                                   # 404 / unknown model id
 ├── FallbackNotApplicable                           # auth / parser — never retry
@@ -313,7 +322,8 @@ exception E
     │
     ▼
 1. typed library exception?
-       ProviderTimeout, BackendUnavailable           → eligible
+       ProviderTimeout, BackendUnavailable,          → eligible
+       ProviderModelCreationFailed
        FallbackNotApplicable, ModelDeprecated,       → not eligible
        ModelNotFound
     │

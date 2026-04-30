@@ -453,6 +453,7 @@ print(chain.last_result.attempts, chain.last_result.cost)
 ```python
 from robust_llm_chain.errors import (
     AllProvidersFailed, ProviderTimeout, FallbackNotApplicable, BackendUnavailable,
+    ProviderInactive, ProviderModelCreationFailed,
 )
 
 try:
@@ -460,6 +461,10 @@ try:
 except BackendUnavailable as e:
     # Memcached down — switch to LocalBackend explicitly or fail the request
     log.error("backend unavailable", extra={"error": str(e)})
+except ProviderInactive:
+    # Adapter extras not installed (e.g. `pip install robust-llm-chain[anthropic]`
+    # missing) — environment problem, not a transient error. fail-fast.
+    raise
 except FallbackNotApplicable:
     # Auth error or parser failure — no point retrying
     raise
@@ -469,6 +474,8 @@ except AllProvidersFailed as e:
 except ProviderTimeout as e:
     log.error(f"total timeout in phase={e.phase}")
 ```
+
+> **Adapter build errors** (`ProviderModelCreationFailed`, v0.4.1+): any raw SDK / config exception raised by `adapter.build()` (e.g. `ValueError("model id wrong")`, `botocore.errorfactory.ValidationException`) is wrapped into `ProviderModelCreationFailed` so external callers see a single typed contract instead of vendor-specific exceptions. The original raw exception is preserved on `__cause__`. Wrapped errors are **fallback-eligible** — multi-provider fault tolerance treats one vendor's config error as "try the next one". A persistently-broken provider therefore fails silently as long as another succeeds; **monitor `ChainResult.attempts` for `phase == "model_creation"` to detect chronic config drift**. All providers failing surfaces as `AllProvidersFailed`.
 
 ---
 

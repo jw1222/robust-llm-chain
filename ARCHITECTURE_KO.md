@@ -153,6 +153,11 @@ chain.{ainvoke|astream|acall}                         진입
    for spec in attempt_order:
        a. model = adapter.build(spec).bind(           호출별 max_tokens / temperature
                        max_tokens=..., temperature=...)
+                                                      raw SDK exception 은 ProviderModelCreationFailed
+                                                      로 wrap (typed contract, __cause__ 보존,
+                                                      fallback eligible). 다른 RobustChainError
+                                                      subclass (ProviderInactive / BackendUnavailable
+                                                      등) 은 그대로 통과.
        b. output, usage = await executor.collect(...) Phase 1: first_token 대기
                                                       Phase 2: chunk pump (per_provider deadline)
                                                       Phase 3: 제한된 aclose() 정리
@@ -297,7 +302,10 @@ RobustChainError                                    (base)
 ├── NoProvidersConfigured                           # 활성 provider 0개
 ├── ProviderInactive                                # extras 설치되었으나 이 버전에서 adapter 비활성
 ├── ProviderTimeout(phase=…)                        # 라이브러리가 부과한 timeout (first_token / stream / total / model_creation)
-├── ProviderModelCreationFailed                     # adapter.build 가 throw
+├── ProviderModelCreationFailed                     # adapter.build raise — raw SDK / config
+│                                                     오류는 여기로 wrap (v0.4.1+); fallback eligible
+│                                                     이라 다른 vendor 들 시도 계속. __cause__ 에
+│                                                     원본 raw exception 보존.
 ├── ModelDeprecated                                 # provider 가 모델 sunset 통지
 ├── ModelNotFound                                   # 404 / 알 수 없는 model id
 ├── FallbackNotApplicable                           # auth / parser — 절대 재시도 안 함
@@ -315,7 +323,8 @@ exception E
     │
     ▼
 1. typed library exception?
-       ProviderTimeout, BackendUnavailable           → eligible
+       ProviderTimeout, BackendUnavailable,          → eligible
+       ProviderModelCreationFailed
        FallbackNotApplicable, ModelDeprecated,       → not eligible
        ModelNotFound
     │
