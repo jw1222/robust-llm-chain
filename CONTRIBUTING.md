@@ -144,7 +144,7 @@ If you accidentally commit a credential, rotate the key immediately at the provi
 A model option. `acall(prompt, *, max_tokens=None, temperature=None, config=None, **template_inputs)` makes the call options keyword-only and explicit; `**template_inputs` only collects names that aren't in the explicit list. So `max_tokens` always routes to the model, never to a `ChatPromptTemplate` variable.
 
 **Q: What happens when `from_env` sees a typo like `model_ids={"antrophic": "..."}`?**
-The unknown type is silently skipped. If no providers end up active, `NoProvidersConfigured` is raised. Future versions may tighten the `model_ids` key type.
+The unknown type is logged via `logger.warning` (with the active type list and a "possible typo?" hint) and skipped. If no providers end up active, `NoProvidersConfigured` is raised. Future versions may tighten the `model_ids` key type.
 
 **Q: gunicorn × N workers + Memcached down — what does the chain do?**
 **fail-closed.** `MemcachedBackend.get_and_increment` raises `BackendUnavailable`. The library does **not** silently fall back to `LocalBackend` because that would silently break the worker-coordinated round-robin guarantee — multiple workers would start hammering the same provider. Catch the error in your application and decide explicitly (rebuild chain with `LocalBackend()`, fail the request, trip a circuit breaker, etc.). For genuine fail-open behavior, write a thin `FailoverBackend` wrapper — example in [ARCHITECTURE.md §7.3](ARCHITECTURE.md#73-fail-closed-semantics-for-shared-backends).

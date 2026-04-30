@@ -218,7 +218,7 @@ result.attempts                     # → [
 
 `RobustChain` 에 어떤 provider 를 쓸지 알려주는 방식이 **세 가지**다. **표현 가능한 capability** + 호출부 간결성이 다르다:
 
-| Capability | `RobustChain.from_env(model_ids={...})` | **`RobustChain.builder().add_*(...).build()`** | `RobustChain(providers=[ProviderSpec(...)])` |
+| Capability | `RobustChain.from_env(model_ids={...})` | **`RobustChain.builder().add_provider(...).add_bedrock(...).build()`** | `RobustChain(providers=[ProviderSpec(...)])` |
 |---|---|---|---|
 | credential source | env vars (자동 read, dict key = type) | **값** 으로 `api_key=` 전달 (env / vault / secrets manager 어디서든 읽어와서) | **값** 으로 `api_key=` 전달 |
 | model_id source | dict value | `model="..."` keyword | `ModelSpec(model_id=...)` 필드 |

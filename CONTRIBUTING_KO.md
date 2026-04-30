@@ -146,7 +146,7 @@ Breaking 이 아닌 것:
 모델 옵션이다. `acall(prompt, *, max_tokens=None, temperature=None, config=None, **template_inputs)` 가 호출 옵션을 keyword-only 로 명시화하며, `**template_inputs` 는 명시 목록에 없는 이름들만 모은다. 따라서 `max_tokens` 는 항상 모델로 라우팅되며, 절대 `ChatPromptTemplate` 변수로 가지 않는다.
 
 **Q: `from_env` 가 `model_ids={"antrophic": "..."}` 같은 오타를 보면 어떻게 되나?**
-알 수 없는 type 은 조용히 skip 된다. 활성 provider 가 0개로 끝나면 `NoProvidersConfigured` 가 raise 된다. 향후 버전에서 `model_ids` key 타입을 더 엄격하게 만들 수 있다.
+알 수 없는 type 은 `logger.warning` (활성 type 목록 + "possible typo?" 힌트 포함) 으로 기록된 후 skip 된다. 활성 provider 가 0개로 끝나면 `NoProvidersConfigured` 가 raise 된다. 향후 버전에서 `model_ids` key 타입을 더 엄격하게 만들 수 있다.
 
 **Q: gunicorn × N worker + Memcached down — chain 이 어떻게 행동하나?**
 **fail-closed.** `MemcachedBackend.get_and_increment` 가 `BackendUnavailable` 을 raise 한다. 본 라이브러리는 `LocalBackend` 로 **조용히** 폴백하지 **않는다** — 그러면 worker 조율 라운드 로빈 보장이 조용히 깨지고, 여러 worker 가 동일 provider 를 두드리기 시작할 것이기 때문. 애플리케이션에서 에러를 catch 하고 명시적으로 결정 (`LocalBackend()` 로 chain 재구성, 요청 실패 처리, circuit breaker 트립, 등). 진짜 fail-open 동작이 필요하면 얇은 `FailoverBackend` wrapper 를 작성 — 예제는 [ARCHITECTURE.md §7.3](ARCHITECTURE.md#73-fail-closed-semantics-for-shared-backends).

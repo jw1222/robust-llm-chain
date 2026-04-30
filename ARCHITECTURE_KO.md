@@ -18,7 +18,7 @@ robust-llm-chain/
 ├── LICENSE                            # MIT
 ├── pyproject.toml                     # PEP 621, hatchling, ruff/mypy/pytest
 ├── uv.lock                            # commit (재현 가능성)
-├── .python-version                    # 3.13.x
+├── .python-version                    # local dev pin (3.13.x); 패키지는 pyproject.toml 기준 3.11–3.13 지원
 ├── .env.example                       # placeholder env vars
 ├── Makefile                           # uv run 단축키
 ├── .github/workflows/ci.yml           # GitHub Actions CI
@@ -425,7 +425,7 @@ register_adapter(MistralAdapter())
 
 ### 7.2 새 `IndexBackend` (라운드 로빈 저장소)
 
-DynamoDB / Cloudflare KV / Redis (v0.2 출시) / 등을 위해, 다음을 구현:
+내장: `LocalBackend` (single-worker `asyncio.Lock`) + `MemcachedBackend` (multi-worker, `aiomcache` 기반, fail-closed). Redis / DynamoDB / Cloudflare KV / 등은 아래 Protocol 을 구현하면 라이브러리 변경 없이 추가 가능:
 
 ```python
 class IndexBackend(Protocol):

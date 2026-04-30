@@ -16,7 +16,7 @@ robust-llm-chain/
 ├── LICENSE                            # MIT
 ├── pyproject.toml                     # PEP 621, hatchling, ruff/mypy/pytest
 ├── uv.lock                            # committed (reproducible)
-├── .python-version                    # 3.13.x
+├── .python-version                    # local dev pin (3.13.x); package supports 3.11–3.13 per pyproject.toml
 ├── .env.example                       # placeholder env vars
 ├── Makefile                           # uv run shortcuts
 ├── .github/workflows/ci.yml           # GitHub Actions CI
@@ -424,7 +424,7 @@ Built-in adapters (`anthropic`, `openrouter`, `openai`, `bedrock`) use exactly t
 
 ### 7.2 New `IndexBackend` (round-robin storage)
 
-For DynamoDB / Cloudflare KV / Redis (v0.2 ships) / etc., implement:
+Built-in: `LocalBackend` (single-worker `asyncio.Lock`) + `MemcachedBackend` (multi-worker via `aiomcache`, fail-closed). Redis / DynamoDB / Cloudflare KV / etc. can be added by implementing the Protocol below — no library change required:
 
 ```python
 class IndexBackend(Protocol):

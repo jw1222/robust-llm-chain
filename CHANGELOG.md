@@ -220,7 +220,7 @@ RobustChain.builder().add_bedrock(
 - `compute_cost(pricing, usage)` signature narrowing — Codex Review R2 5min-patch (현재 `(model_spec, usage)` 가 호출처 편의 우선).
 - `env_api_key_credentials` public 노출 재검토 — Codex Review R2 (현재 외부 contributor 의 custom adapter 편의로 `__all__` 등록).
 - mixed-currency 비용 누적 정책 — Codex Review R2 (현재 LHS currency 채택, orchestrator 가 single-currency 가정).
-- `ProviderModelCreationFailed` 정의 vs raise 미사용 cleanup — Codex Q4 (minor dead code).
+- ~~`ProviderModelCreationFailed` 정의 vs raise 미사용 cleanup — Codex Q4 (minor dead code).~~ **Resolved in [0.4.1]** — `chain._build_model` 가 raw exception 을 wrap, fallback eligible 분류 + `__cause__` chain 보존.
 - `_V02_PLACEHOLDER_TYPES` 의 redis 분류 — backend concept 인데 provider type 으로 분류, v0.2 에서 backend extra 활성 시 재고.
 
 ## [0.2.0] - 2026-04-29

@@ -218,7 +218,7 @@ The library does **not** depend on `python-dotenv`. Loading `.env` files is up t
 
 There are **three ways** to tell `RobustChain` which providers to use. They differ in **what they can express** and how concise the call site is:
 
-| Capability | `RobustChain.from_env(model_ids={...})` | **`RobustChain.builder().add_*(...).build()`** | `RobustChain(providers=[ProviderSpec(...)])` |
+| Capability | `RobustChain.from_env(model_ids={...})` | **`RobustChain.builder().add_provider(...).add_bedrock(...).build()`** | `RobustChain(providers=[ProviderSpec(...)])` |
 |---|---|---|---|
 | Source of credentials | env vars (auto-read, dict key = type) | **values** passed via `api_key=` (read from anywhere — env, vault, secrets manager) | **values** passed via `api_key=` |
 | Source of model_id | dict value | `model="..."` keyword arg | `ModelSpec(model_id=...)` field |
