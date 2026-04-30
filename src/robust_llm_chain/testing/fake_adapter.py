@@ -36,6 +36,10 @@ class FakeScenario:
     # Raised after the configured ``chunks`` have all been yielded — used to
     # simulate post-commit streaming failures (StreamInterrupted scenarios).
     chunks_exception: BaseException | None = None
+    # Raised by ``FakeAdapter.build()`` to simulate SDK validation/config
+    # errors (model id wrong, region wrong, etc.) — used to verify that
+    # ``chain._build_model`` wraps these into ``ProviderModelCreationFailed``.
+    build_exception: BaseException | None = None
 
 
 @dataclass
@@ -59,6 +63,7 @@ class FakeAdapter:
         delay: float = 0.0,
         usage: dict[str, int] | None = None,
         chunks_exception: BaseException | None = None,
+        build_exception: BaseException | None = None,
     ) -> None:
         """Configure the response for ``provider_id``.
 
@@ -72,6 +77,8 @@ class FakeAdapter:
             usage: Returned as ``usage_metadata``.
             chunks_exception: Raised after all configured ``chunks`` have been
                 yielded — simulates post-commit streaming failures.
+            build_exception: Raised by ``build()`` to simulate SDK validation
+                or config errors (model id wrong, region wrong, etc.).
         """
         self._scenarios[provider_id] = FakeScenario(
             text=text,
@@ -80,6 +87,7 @@ class FakeAdapter:
             delay=delay,
             usage=usage,
             chunks_exception=chunks_exception,
+            build_exception=build_exception,
         )
 
     def assert_inputs(
@@ -97,6 +105,8 @@ class FakeAdapter:
     def build(self, spec: ProviderSpec) -> BaseChatModel:
         """Construct a ``_FakeChatModel`` bound to ``spec.id``'s scenario."""
         scenario = self._scenarios.get(spec.id, FakeScenario())
+        if scenario.build_exception is not None:
+            raise scenario.build_exception
         model = _FakeChatModel(scenario=scenario, provider_id=spec.id)
         # Bind the adapter's sinks via PrivateAttr so capture survives
         # Pydantic's model construction (which would otherwise replace

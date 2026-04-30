@@ -4,11 +4,33 @@
 
 ## [Unreleased]
 
-### v0.5 backlog — 외부 senior review (2026-04-30) 후속
+### v0.5 backlog — 외부 senior review (2026-04-30) 후속 잔여
 
-- **adapter build 오류 표준화**: `ProviderModelCreationFailed` (errors.py:37) 가 정의만 있고 raise 0건. SDK validation/config 오류가 raw exception 으로 새는 상태. `chain._build_model` 에서 wrap 적용. wrap 대상 exception 범위는 v0.5 설계 시 결정. v0.2 backlog #11 과 동일.
-- **observability hookup**: `observability/langsmith.py::cleanup_run` 헬퍼는 정의되어 있으나 `chain.py` failover loop 에서 호출 0건 + `_record_attempt(run_id=None)` hardcode. 적용하려면 `RunnableConfig` 에서 run_id 추출 패턴 정립 필요. LangSmith 자동 트레이싱은 작동 (Runnable 호환) 하나 fallback 발생 시 pending run cleanup 안 됨.
+- **observability hookup**: `observability/langsmith.py::cleanup_run` 헬퍼는 정의되어 있으나 `chain.py` failover loop 에서 호출 0건 + `_record_attempt(run_id=None)` hardcode. 적용하려면 `RunnableConfig` 에서 run_id 추출 패턴 정립 필요 (LangChain run lifecycle 결정 영역). 첫 외부 사용자 요청 시 시작 권장.
 - **version SSoT** (`pyproject.toml:7` + `__init__.py:23` 중복 → hatchling-vcs 같은 dynamic version): release 자동화와 묶어서 처리.
+
+## [0.4.1] - 2026-04-30
+
+### Added — Adapter build error 표준화 (외부 senior review #3)
+
+`chain._build_model` 가 `adapter.build()` 의 raw SDK / config exception 을 typed `ProviderModelCreationFailed` 로 wrap. 이전에는 `ValueError` / `botocore.errorfactory.ValidationException` 등이 raw 로 새서 외부 사용자가 SDK exception type 을 직접 catch 해야 했음. 이제 라이브러리 contract 안에서 일관되게 처리.
+
+**정책**:
+- wrap 대상: `Exception` 전체 (단 `ProviderInactive` 와 `ProviderModelCreationFailed` 자체는 통과)
+- `is_fallback_eligible(ProviderModelCreationFailed)` = `True` (multi-provider fault tolerance 의도 보존 — 한 vendor 의 model id wrong / region wrong 같은 config 오류가 다른 vendor 차단하지 않음)
+- `__cause__` chain 에 raw exception 보존 — 디버깅 시 추적 가능
+- `AttemptRecord.phase = "model_creation"` + `error_type = "ProviderModelCreationFailed"` + `fallback_eligible = True` 메타데이터 기록
+- `ProviderInactive` (extras 누락) 는 기존 동작 유지 — fallback NOT eligible, 즉시 raise (사용자 환경 셋팅 오류는 vendor 변경으로 해결 안 됨)
+
+**회귀 보호**:
+- `tests/test_chain.py::test_acall_adapter_build_raw_exception_wraps_into_provider_model_creation_failed` — `ValueError` raise → 다음 provider 로 fallback
+- `tests/test_chain.py::test_acall_all_adapter_build_failures_raise_all_providers_failed` — 모든 build 실패 시 `AllProvidersFailed` 안에 wrap 된 attempts + `__cause__` 가 `ProviderModelCreationFailed`
+
+**테스트 인프라**:
+- `FakeAdapter.set_response(build_exception=...)` 옵션 신규 — adapter.build() 단계 SDK 오류 시뮬레이션 (post-build 의 `exception=...` 와 별개)
+
+### Validation
+- 213 unit pass (2 추가) / mypy strict 0 / ruff 0 / format 0
 
 ## [0.4.0] - 2026-04-30
 

@@ -38,6 +38,7 @@ from robust_llm_chain.errors import (
     AllProvidersFailed,
     NoProvidersConfigured,
     ProviderInactive,
+    ProviderModelCreationFailed,
     ProviderTimeout,
     StreamInterrupted,
     is_fallback_eligible,
@@ -338,7 +339,18 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
         temperature_override: float | None,
     ) -> BaseChatModel | Runnable[Any, Any]:
         adapter = get_adapter(spec.type)
-        base = adapter.build(spec)
+        # Wrap raw SDK / config errors from adapter.build() into the typed
+        # ProviderModelCreationFailed contract. ProviderInactive (extras
+        # missing — environment problem, fallback NOT eligible) and an
+        # already-typed ProviderModelCreationFailed pass through untouched.
+        try:
+            base = adapter.build(spec)
+        except (ProviderInactive, ProviderModelCreationFailed):
+            raise
+        except Exception as exc:
+            raise ProviderModelCreationFailed(
+                f"adapter {spec.type!r} (id={spec.id!r}) failed to construct model: {exc}"
+            ) from exc
         bind_kwargs: dict[str, Any] = {}
         if max_tokens_override is not None:
             bind_kwargs["max_tokens"] = max_tokens_override
@@ -419,6 +431,12 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
                     self._record_attempt(spec, "model_creation", attempt_start, None, False)
                 )
                 raise
+            except ProviderModelCreationFailed as exc:
+                attempts.append(
+                    self._record_attempt(spec, "model_creation", attempt_start, exc, True)
+                )
+                last_error = exc
+                continue
             try:
                 output, usage = await self._executor.collect(model, messages)
             except Exception as exc:
@@ -516,6 +534,9 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
                 self._record_attempt(spec, "model_creation", attempt_start, None, False)
             )
             raise
+        except ProviderModelCreationFailed as exc:
+            attempts.append(self._record_attempt(spec, "model_creation", attempt_start, exc, True))
+            return None, None, attempt_start, exc
         agen = self._executor.stream(model, messages)
         try:
             first = await agen.__anext__()

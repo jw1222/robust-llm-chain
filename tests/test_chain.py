@@ -15,6 +15,7 @@ from robust_llm_chain.errors import (
     AllProvidersFailed,
     NoProvidersConfigured,
     ProviderInactive,
+    ProviderModelCreationFailed,
     ProviderTimeout,
     StreamInterrupted,
 )
@@ -125,6 +126,61 @@ def test_acall_all_providers_fail_raises_all_failed():
         except AllProvidersFailed as exc:
             assert len(exc.attempts) == 2
             assert all(a.fallback_eligible for a in exc.attempts)
+            return
+        raise AssertionError("expected AllProvidersFailed")
+
+    asyncio.run(_run())
+
+
+def test_acall_adapter_build_raw_exception_wraps_into_provider_model_creation_failed():
+    """Adapter.build() raw SDK exceptions are wrapped into the typed
+    ``ProviderModelCreationFailed`` contract; first wrapped failure is fallback
+    eligible so the next provider is tried.
+
+    Regression for the v0.5 backlog adapter-build error standardization —
+    raw exceptions (ValueError, botocore ValidationException, etc.) must not
+    leak past chain._build_model. External callers rely on the typed contract.
+    """
+
+    async def _run():
+        adapter = _setup()
+        adapter.set_response("p1", build_exception=ValueError("model id wrong"))
+        adapter.set_response("p2", text="recovered")
+        chain = RobustChain(providers=[_fake_spec("p1"), _fake_spec("p2")])
+
+        result = await chain.acall("hi")
+
+        assert result.output.content == "recovered"
+        assert result.provider_used.id == "p2"
+        assert len(result.attempts) == 2
+        assert result.attempts[0].phase == "model_creation"
+        assert result.attempts[0].error_type == "ProviderModelCreationFailed"
+        assert result.attempts[0].fallback_eligible is True
+        assert result.attempts[1].phase == "stream"
+        assert result.attempts[1].error_type is None
+
+    asyncio.run(_run())
+
+
+def test_acall_all_adapter_build_failures_raise_all_providers_failed():
+    """When every adapter.build() fails, AllProvidersFailed surfaces with
+    ProviderModelCreationFailed-typed attempts (not raw exceptions)."""
+
+    async def _run():
+        adapter = _setup()
+        adapter.set_response("p1", build_exception=ValueError("bad model id"))
+        adapter.set_response("p2", build_exception=RuntimeError("region unsupported"))
+        chain = RobustChain(providers=[_fake_spec("p1"), _fake_spec("p2")])
+
+        try:
+            await chain.acall("hi")
+        except AllProvidersFailed as exc:
+            assert len(exc.attempts) == 2
+            assert all(a.phase == "model_creation" for a in exc.attempts)
+            assert all(a.error_type == "ProviderModelCreationFailed" for a in exc.attempts)
+            assert all(a.fallback_eligible for a in exc.attempts)
+            # The chained __cause__ preserves the raw SDK exception for debugging.
+            assert isinstance(exc.__cause__, ProviderModelCreationFailed)
             return
         raise AssertionError("expected AllProvidersFailed")
 

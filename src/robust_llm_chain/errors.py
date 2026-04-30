@@ -138,7 +138,7 @@ def is_fallback_eligible(exc: BaseException) -> bool:
     # Stage 1: typed library exceptions.
     if isinstance(exc, FallbackNotApplicable | ModelDeprecated | ModelNotFound):
         return False
-    if isinstance(exc, ProviderTimeout | BackendUnavailable):
+    if isinstance(exc, ProviderTimeout | BackendUnavailable | ProviderModelCreationFailed):
         return True
 
     # Stage 2: SDK class name matching (no import).
