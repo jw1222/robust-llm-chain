@@ -19,6 +19,10 @@
 - 8 integration + 1 e2e PASS (실제 4-provider API 회귀 보호 유지)
 - 3.11.15 로컬 검증 추가 (`uv python install 3.11` + venv full unit suite)
 
+### Docs — PyPI long_description 호환 (R6 codex finding)
+- `README.md` 의 모든 relative link (`LICENSE`, `*_KO.md`, `SECURITY.md`, `ARCHITECTURE.md`, `CHANGELOG.md`, `examples/builder.py`) 를 absolute `https://github.com/jw1222/robust-llm-chain/blob/main/...` URL 로 변환. PyPI long_description 으로 이 README 가 그대로 노출되는데 PyPI 페이지에서 relative link 는 404. R6 codex 가 BLOCKER 로 식별 + in-place fix.
+- `README_KO.md` 동일 처리 — 일관성 + 추후 PyPI/외부 도구가 KO 도 노출할 가능성 대비.
+
 ### Docs — drift 정리 + As-Is + upgrade warning (R5 review 반영)
 - `README.md` / `README_KO.md` Status 섹션: "v0.1 is in active development / Python 3.13 only" → "v0.3.x in pre-1.0 active development / CI matrix Python 3.11 / 3.12 / 3.13"
 - `README.md` / `README_KO.md` 본문에 남아있던 6건의 "v0.1 production combo" / "Active in v0.1" / "not implemented in v0.1" / "v0.1: Memcached, v0.2: Redis" 잔재 정리 (R5 simplify finding) — 영/한 동시

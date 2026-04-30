@@ -1,12 +1,12 @@
 # robust-llm-chain
 
-> 🇰🇷 한국어 번역. 원본은 [README.md](README.md) 참조 — 원본이 정본이며, 번역과 원본이 다를 시 원본 우선.
+> 🇰🇷 한국어 번역. 원본은 [README.md](https://github.com/jw1222/robust-llm-chain/blob/main/README.md) 참조 — 원본이 정본이며, 번역과 원본이 다를 시 원본 우선.
 
 <!-- CI 배지는 Phase 3 에서 .github/workflows/ci.yml 가 준비되면 활성화 예정 -->
 [![CI](https://img.shields.io/badge/CI-pending-lightgrey.svg)](https://github.com/jw1222/robust-llm-chain/actions)
 [![PyPI](https://img.shields.io/badge/PyPI-0.3.1-blue.svg)](https://pypi.org/project/robust-llm-chain/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/jw1222/robust-llm-chain/blob/main/LICENSE)
 
 > **LLM API 를 위한 프로덕션 등급 cross-vendor 페일오버.**
 > 사용 중인 provider 가 529 / pending / throttle 에 걸리면, 동일한 요청을 다음 vendor 로 자동 재시도한다 — 1초 미만의 감지, worker 간 조율된 라운드 로빈.
@@ -162,7 +162,7 @@ result.attempts                     # → [
 
 ## Logging
 
-본 라이브러리는 Python 표준 `logging` 모듈을 통해 **WARN/ERROR 한정 구조화 로그** 만 발생시킨다. DEBUG/INFO 잡담은 없으며, **prompt 또는 response 텍스트는 절대 로깅되지 않는다** — 이는 애플리케이션의 책임이다 (자세한 hardening 항목 #3 은 [SECURITY.md](SECURITY.md) 참조).
+본 라이브러리는 Python 표준 `logging` 모듈을 통해 **WARN/ERROR 한정 구조화 로그** 만 발생시킨다. DEBUG/INFO 잡담은 없으며, **prompt 또는 response 텍스트는 절대 로깅되지 않는다** — 이는 애플리케이션의 책임이다 (자세한 hardening 항목 #3 은 [SECURITY.md](https://github.com/jw1222/robust-llm-chain/blob/main/SECURITY.md) 참조).
 
 ### Logger 이름
 
@@ -234,7 +234,7 @@ result.attempts                     # → [
 ### 빠른 결정 흐름
 
 - "그냥 env 에서 Claude 1개 + OpenAI 1개, 가장 단순하게" → `from_env`. 끝.
-- **"multi-key / multi-region / cross-vendor / 명시 priority"** → **`RobustChain.builder()`** (대부분 production 권장). [`examples/builder.py`](examples/builder.py) 참조.
+- **"multi-key / multi-region / cross-vendor / 명시 priority"** → **`RobustChain.builder()`** (대부분 production 권장). [`examples/builder.py`](https://github.com/jw1222/robust-llm-chain/blob/main/examples/builder.py) 참조.
 - "다른 코드에서 `ProviderSpec` 인스턴스를 이미 만들고 있어 (config loader, orchestrator)" → 명시 `providers=[ProviderSpec(...)]` list. 아래 [Advanced usage](#advanced-usage) 섹션의 inline 코드 참조.
 
 > **`priority=` 의미:** 낮은 값이 우선 (DNS MX / cron / Linux `nice` 관행). `priority=0` 이 primary, 동률이면 사용자가 추가한 순서 보존.
@@ -313,7 +313,7 @@ result.attempts                     # → [
 
 ## Advanced usage
 
-> **실행 가능 예제:** 아래 4 가지 패턴 — multi-key, 3-way Claude 페일오버, cross-vendor (Claude → GPT), Bedrock multi-region — 은 [`examples/builder.py`](examples/builder.py) 에 `RobustChain.builder()` 로 실행 가능 스크립트로 들어 있다. `uv run python examples/builder.py multikey` (또는 `3way` / `xvendor` / `multiregion`) 로 실행. 아래 inline 코드 블록은 같은 패턴을 명시 `providers=[ProviderSpec(...)]` 로 표현 — config loader 에서 spec 인스턴스를 이미 만들고 있는 use case 용.
+> **실행 가능 예제:** 아래 4 가지 패턴 — multi-key, 3-way Claude 페일오버, cross-vendor (Claude → GPT), Bedrock multi-region — 은 [`examples/builder.py`](https://github.com/jw1222/robust-llm-chain/blob/main/examples/builder.py) 에 `RobustChain.builder()` 로 실행 가능 스크립트로 들어 있다. `uv run python examples/builder.py multikey` (또는 `3way` / `xvendor` / `multiregion`) 로 실행. 아래 inline 코드 블록은 같은 패턴을 명시 `providers=[ProviderSpec(...)]` 로 표현 — config loader 에서 spec 인스턴스를 이미 만들고 있는 use case 용.
 
 ### Multi-worker 프로덕션 (Memcached 조율 라운드 로빈)
 ```python
@@ -467,20 +467,20 @@ except ProviderTimeout as e:
 
 ## Architecture
 
-모듈 구조, 의존성 그래프, 호출 lifecycle (`acall` / `ainvoke` / `astream`), error flow, 확장 지점 (custom `ProviderAdapter` / `IndexBackend`) 은 [ARCHITECTURE.md](ARCHITECTURE.md) 에 정리되어 있다. PR 을 열거나 custom adapter 를 연결하기 전에 읽어볼 것.
+모듈 구조, 의존성 그래프, 호출 lifecycle (`acall` / `ainvoke` / `astream`), error flow, 확장 지점 (custom `ProviderAdapter` / `IndexBackend`) 은 [ARCHITECTURE.md](https://github.com/jw1222/robust-llm-chain/blob/main/ARCHITECTURE.md) 에 정리되어 있다. PR 을 열거나 custom adapter 를 연결하기 전에 읽어볼 것.
 
 ---
 
 ## Status
 
-**v0.3.x pre-1.0 활성 개발 중.** CI 매트릭스: **Python 3.11 / 3.12 / 3.13**. Public API 는 1.0 이전에 깨질 수 있으며, 모든 변경은 [CHANGELOG.md](CHANGELOG.md) 에 기록된다 (v0.3 에서 두 BREAKING change 있었음 — 마이그레이션 노트 참조).
+**v0.3.x pre-1.0 활성 개발 중.** CI 매트릭스: **Python 3.11 / 3.12 / 3.13**. Public API 는 1.0 이전에 깨질 수 있으며, 모든 변경은 [CHANGELOG.md](https://github.com/jw1222/robust-llm-chain/blob/main/CHANGELOG.md) 에 기록된다 (v0.3 에서 두 BREAKING change 있었음 — 마이그레이션 노트 참조).
 
 **As-Is — 지원 보장 없음.** MIT 라이선스 하에 제공; SLA / issue 응답 일정 / 기능 요청 commitment 모두 없음. 버그는 편할 때 수정. 본인 use case 에 안 맞으면 **fork 하세요**. PR 환영하지만 의존하지 않음. 메인테이너 본인의 dogfooding 을 우선하여 최적화된 개인 프로젝트.
 
-> **⚠️ v0.2.x 에서 업그레이드?** v0.3.0 이 `priority=` semantic 을 **낮은 값이 우선** (DNS MX / cron 관행) 으로 반전했고, 4 typed `add_*` 빌더 메서드를 `add_provider(type=…)` + `add_bedrock(...)` 로 통합했습니다. v0.2 README 예시의 `priority=0` (primary 라벨) 을 그대로 복사했다면 — 실제로는 fallback 이 먼저 호출되고 있었음. v0.3 부터는 진짜 primary 로 갑니다. **업그레이드 전후 트래픽 분포 검증 필수.** 전체 마이그레이션은 [CHANGELOG.md `[0.3.0]`](CHANGELOG.md#030---2026-04-29) 참조.
+> **⚠️ v0.2.x 에서 업그레이드?** v0.3.0 이 `priority=` semantic 을 **낮은 값이 우선** (DNS MX / cron 관행) 으로 반전했고, 4 typed `add_*` 빌더 메서드를 `add_provider(type=…)` + `add_bedrock(...)` 로 통합했습니다. v0.2 README 예시의 `priority=0` (primary 라벨) 을 그대로 복사했다면 — 실제로는 fallback 이 먼저 호출되고 있었음. v0.3 부터는 진짜 primary 로 갑니다. **업그레이드 전후 트래픽 분포 검증 필수.** 전체 마이그레이션은 [CHANGELOG.md `[0.3.0]`](https://github.com/jw1222/robust-llm-chain/blob/main/CHANGELOG.md#030---2026-04-29) 참조.
 
 ---
 
 ## License
 
-MIT. [LICENSE](LICENSE) 참조.
+MIT. [LICENSE](https://github.com/jw1222/robust-llm-chain/blob/main/LICENSE) 참조.

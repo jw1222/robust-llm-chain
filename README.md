@@ -4,9 +4,9 @@
 [![CI](https://img.shields.io/badge/CI-pending-lightgrey.svg)](https://github.com/jw1222/robust-llm-chain/actions)
 [![PyPI](https://img.shields.io/badge/PyPI-0.3.1-blue.svg)](https://pypi.org/project/robust-llm-chain/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/jw1222/robust-llm-chain/blob/main/LICENSE)
 
-> 🇰🇷 한국어 문서: [README_KO.md](README_KO.md) · [ARCHITECTURE_KO.md](ARCHITECTURE_KO.md) · [CONTRIBUTING_KO.md](CONTRIBUTING_KO.md) · [SECURITY_KO.md](SECURITY_KO.md) · [CODE_OF_CONDUCT_KO.md](CODE_OF_CONDUCT_KO.md). 원본 (English) 이 정본.
+> 🇰🇷 한국어 문서: [README_KO.md](https://github.com/jw1222/robust-llm-chain/blob/main/README_KO.md) · [ARCHITECTURE_KO.md](https://github.com/jw1222/robust-llm-chain/blob/main/ARCHITECTURE_KO.md) · [CONTRIBUTING_KO.md](https://github.com/jw1222/robust-llm-chain/blob/main/CONTRIBUTING_KO.md) · [SECURITY_KO.md](https://github.com/jw1222/robust-llm-chain/blob/main/SECURITY_KO.md) · [CODE_OF_CONDUCT_KO.md](https://github.com/jw1222/robust-llm-chain/blob/main/CODE_OF_CONDUCT_KO.md). 원본 (English) 이 정본.
 
 > **Production-grade cross-vendor failover for LLM APIs.**
 > When your provider hits 529 / pending / throttle, automatically retry on the next vendor — same request, sub-second detection, worker-coordinated round-robin.
@@ -162,7 +162,7 @@ The standard Runnable `ainvoke()` returns just a `BaseMessage`. To inspect `atte
 
 ## Logging
 
-The library emits **structured WARN/ERROR-only logs** through Python's standard `logging` module. There is no DEBUG/INFO chatter, and **prompt or response text is never logged** — that is the application's responsibility (see [SECURITY.md](SECURITY.md) hardening #3).
+The library emits **structured WARN/ERROR-only logs** through Python's standard `logging` module. There is no DEBUG/INFO chatter, and **prompt or response text is never logged** — that is the application's responsibility (see [SECURITY.md](https://github.com/jw1222/robust-llm-chain/blob/main/SECURITY.md) hardening #3).
 
 ### Logger names
 
@@ -234,7 +234,7 @@ There are **three ways** to tell `RobustChain` which providers to use. They diff
 ### Quick decision tree
 
 - "Just want one Claude + one OpenAI from env vars, simplest possible" → `from_env`. Done.
-- **"Need multi-key / multi-region / cross-vendor / explicit priority"** → **`RobustChain.builder()`** (recommended for most production). See [`examples/builder.py`](examples/builder.py).
+- **"Need multi-key / multi-region / cross-vendor / explicit priority"** → **`RobustChain.builder()`** (recommended for most production). See [`examples/builder.py`](https://github.com/jw1222/robust-llm-chain/blob/main/examples/builder.py).
 - "Already constructing `ProviderSpec` instances elsewhere in code (config loader, orchestrator)" → explicit `providers=[ProviderSpec(...)]` list. See the inline code in [Advanced usage](#advanced-usage) below.
 
 > **`priority=` semantics:** lower value wins (DNS MX / cron / Linux `nice` convention). `priority=0` is the primary; ties preserve user-listed order.
@@ -313,7 +313,7 @@ For most users the answer is **"use both"**: this library handles the cross-vend
 
 ## Advanced usage
 
-> **Runnable examples:** all four patterns below — multi-key, 3-way Claude failover, cross-vendor (Claude → GPT), Bedrock multi-region — are runnable scripts in [`examples/builder.py`](examples/builder.py) (using `RobustChain.builder()`). Try with `uv run python examples/builder.py multikey` (or `3way` / `xvendor` / `multiregion`). The inline code blocks below show the same patterns expressed via explicit `providers=[ProviderSpec(...)]` for use cases where you already have spec instances from a config loader.
+> **Runnable examples:** all four patterns below — multi-key, 3-way Claude failover, cross-vendor (Claude → GPT), Bedrock multi-region — are runnable scripts in [`examples/builder.py`](https://github.com/jw1222/robust-llm-chain/blob/main/examples/builder.py) (using `RobustChain.builder()`). Try with `uv run python examples/builder.py multikey` (or `3way` / `xvendor` / `multiregion`). The inline code blocks below show the same patterns expressed via explicit `providers=[ProviderSpec(...)]` for use cases where you already have spec instances from a config loader.
 
 ### Multi-worker production (Memcached-coordinated round-robin)
 ```python
@@ -467,20 +467,20 @@ except ProviderTimeout as e:
 
 ## Architecture
 
-Module structure, dependency graph, call lifecycle (`acall` / `ainvoke` / `astream`), error flow, and extension points (custom `ProviderAdapter` / `IndexBackend`) are documented in [ARCHITECTURE.md](ARCHITECTURE.md). Read that before opening a PR or wiring a custom adapter.
+Module structure, dependency graph, call lifecycle (`acall` / `ainvoke` / `astream`), error flow, and extension points (custom `ProviderAdapter` / `IndexBackend`) are documented in [ARCHITECTURE.md](https://github.com/jw1222/robust-llm-chain/blob/main/ARCHITECTURE.md). Read that before opening a PR or wiring a custom adapter.
 
 ---
 
 ## Status
 
-**v0.3.x in pre-1.0 active development.** CI matrix: **Python 3.11 / 3.12 / 3.13**. Public API may break before 1.0; all changes are documented in [CHANGELOG.md](CHANGELOG.md) (v0.3 had two BREAKING changes — see migration notes there).
+**v0.3.x in pre-1.0 active development.** CI matrix: **Python 3.11 / 3.12 / 3.13**. Public API may break before 1.0; all changes are documented in [CHANGELOG.md](https://github.com/jw1222/robust-llm-chain/blob/main/CHANGELOG.md) (v0.3 had two BREAKING changes — see migration notes there).
 
 **As-Is — no support guarantee.** Provided under MIT license; no SLA, no issue-response timeline, no feature-request commitment. Bugs are fixed when convenient. If something doesn't work for your use case → **fork it**. PRs welcome but not depended on. This is a personal project optimized for the maintainer's own dogfooding.
 
-> **⚠️ Upgrading from v0.2.x?** v0.3.0 flipped `priority=` semantic to **lower-value-wins** (DNS MX / cron convention) AND consolidated 4 typed `add_*` builder methods to `add_provider(type=…)` + `add_bedrock(...)`. If you copy-pasted v0.2 README's `priority=0` (labeled primary) — your traffic was hitting fallback first. v0.3 makes it actually go to primary. **Verify your traffic distribution before/after upgrade.** Full migration in [CHANGELOG.md `[0.3.0]`](CHANGELOG.md#030---2026-04-29).
+> **⚠️ Upgrading from v0.2.x?** v0.3.0 flipped `priority=` semantic to **lower-value-wins** (DNS MX / cron convention) AND consolidated 4 typed `add_*` builder methods to `add_provider(type=…)` + `add_bedrock(...)`. If you copy-pasted v0.2 README's `priority=0` (labeled primary) — your traffic was hitting fallback first. v0.3 makes it actually go to primary. **Verify your traffic distribution before/after upgrade.** Full migration in [CHANGELOG.md `[0.3.0]`](https://github.com/jw1222/robust-llm-chain/blob/main/CHANGELOG.md#030---2026-04-29).
 
 ---
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](https://github.com/jw1222/robust-llm-chain/blob/main/LICENSE).
