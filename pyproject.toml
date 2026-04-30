@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "robust-llm-chain"
-version = "0.3.0"
+version = "0.3.1"
 description = "Production-grade cross-vendor failover for LLM APIs"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 license = "MIT"
 authors = [
     { name = "jw1222" },
@@ -19,6 +19,8 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
@@ -85,7 +87,7 @@ include = [
 # ──────────────────────────────────────────────────────────────────────────────
 [tool.ruff]
 line-length = 100
-target-version = "py313"
+target-version = "py311"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
@@ -135,7 +137,7 @@ line-ending = "lf"
 # Mypy — strict type checking
 # ──────────────────────────────────────────────────────────────────────────────
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.11"
 strict = true
 warn_unused_ignores = true
 warn_redundant_casts = true

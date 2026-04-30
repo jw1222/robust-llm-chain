@@ -20,7 +20,7 @@ from robust_llm_chain.types import (
     TokenUsage,
 )
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 __all__ = [
     "AttemptRecord",

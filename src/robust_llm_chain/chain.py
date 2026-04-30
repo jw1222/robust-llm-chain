@@ -14,7 +14,7 @@ import logging
 import os
 import time
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING, Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn, TypeAlias
 
 if TYPE_CHECKING:
     from robust_llm_chain.builder import RobustChainBuilder
@@ -54,7 +54,7 @@ from robust_llm_chain.types import (
     TokenUsage,
 )
 
-type _TryFirstChunkResult = tuple[
+_TryFirstChunkResult: TypeAlias = tuple[
     BaseMessageChunk | None,
     AsyncIterator[BaseMessageChunk] | None,
     float,

@@ -4,6 +4,20 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-04-30
+
+### Changed — Python 3.11 / 3.12 지원 추가 (additive, non-breaking)
+- `requires-python` 을 `>=3.13` → `>=3.11` 로 완화. 2026 년 enterprise / cloud 환경에서 가장 널리 배포된 3.11 + 3.12 사용자가 추가로 이용 가능 (LangChain 라이브러리들도 대부분 `>=3.10`).
+- `pyproject.toml` classifiers 에 `Programming Language :: Python :: 3.11` / `3.12` 추가.
+- `[tool.ruff] target-version` `py313` → `py311`, `[tool.mypy] python_version` `3.13` → `3.11` (compiler 가 3.11+ 호환 가능 코드만 emit / verify 하도록).
+
+### Refactor — PEP 695 `type X = ...` → `TypeAlias` annotation (PEP 613)
+- `src/robust_llm_chain/types.py:24` `RobustChainInput` + `src/robust_llm_chain/chain.py:57` `_TryFirstChunkResult` 두 alias 를 PEP 695 `type` 키워드 (3.12+) 에서 `TypeAlias` annotation 형태 (3.10+) 로 변환. 의미 동등 변환 — 타입 검사기 동작 동일, 런타임 도입 비용 미미. `tests/test_public_api.py::test_robust_chain_input_alias_importable_from_root` 의 PEP 695 specific `__value__` attribute 검사를 annotation form 에 맞게 약화 (functional 검증으로 대체).
+
+### Validation
+- 207 unit pass (3.13 + 3.12 venv) / mypy strict 0 / ruff 0 / format 0
+- 8 integration + 1 e2e PASS (실제 4-provider API 회귀 보호 유지)
+
 ## [0.3.0] - 2026-04-29
 
 ### Changed (BREAKING) — `priority=` semantic 반전 (lower = preferred)

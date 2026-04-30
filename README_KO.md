@@ -4,8 +4,8 @@
 
 <!-- CI 배지는 Phase 3 에서 .github/workflows/ci.yml 가 준비되면 활성화 예정 -->
 [![CI](https://img.shields.io/badge/CI-pending-lightgrey.svg)](https://github.com/jw1222/robust-llm-chain/actions)
-[![PyPI](https://img.shields.io/badge/PyPI-0.3.0-blue.svg)](https://pypi.org/project/robust-llm-chain/)
-[![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
+[![PyPI](https://img.shields.io/badge/PyPI-0.3.1-blue.svg)](https://pypi.org/project/robust-llm-chain/)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 > **LLM API 를 위한 프로덕션 등급 cross-vendor 페일오버.**

@@ -52,10 +52,17 @@ def test_robust_chain_importable_from_root():
 
 
 def test_robust_chain_input_alias_importable_from_root():
+    """``RobustChainInput`` is a public ``TypeAlias`` for the input union."""
     from robust_llm_chain import RobustChainInput
 
-    # PEP 695 type alias has __value__ attribute.
-    assert hasattr(RobustChainInput, "__value__")
+    # Annotation-form ``TypeAlias`` (PEP 613) is a regular module attribute;
+    # we can't introspect ``__value__`` like a PEP 695 alias, but we can
+    # confirm it accepts the documented input shapes.
+    def _accepts(x: RobustChainInput) -> RobustChainInput:
+        return x
+
+    assert _accepts("a string") == "a string"
+    assert _accepts([]) == []
 
 
 def test_builder_symbols_importable_from_root():

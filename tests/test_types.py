@@ -255,8 +255,13 @@ def test_chain_result_mutable_for_lifecycle():
 
 
 def test_robust_chain_input_alias_includes_expected_members():
-    """The alias must expose the three accepted Runnable input shapes."""
-    members = get_args(RobustChainInput.__value__)
+    """The alias must expose the three accepted Runnable input shapes.
+
+    ``RobustChainInput`` is a ``TypeAlias`` annotation (PEP 613), so the
+    runtime value is the ``str | PromptValue | list[BaseMessage]`` union
+    object directly — ``get_args`` returns its three members.
+    """
+    members = get_args(RobustChainInput)
     member_reprs = {repr(m) for m in members}
 
     assert str in members

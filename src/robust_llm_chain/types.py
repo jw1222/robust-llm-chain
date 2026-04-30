@@ -10,7 +10,7 @@ accumulation.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 from uuid import UUID
 
 from langchain_core.messages import BaseMessage
@@ -20,8 +20,10 @@ from langchain_core.prompt_values import PromptValue
 # Type aliases (public)
 # ──────────────────────────────────────────────────────────────────────────────
 
-# PEP 695 type alias (Python 3.12+). The right-hand side is lazily evaluated.
-type RobustChainInput = str | PromptValue | list[BaseMessage]
+#: Public alias accepted by ``RobustChain.acall`` / ``ainvoke`` / ``astream``.
+#: ``TypeAlias`` annotation form (PEP 613) is used instead of PEP 695
+#: ``type X = ...`` to keep the package importable on Python 3.11.
+RobustChainInput: TypeAlias = str | PromptValue | list[BaseMessage]
 
 
 # ──────────────────────────────────────────────────────────────────────────────

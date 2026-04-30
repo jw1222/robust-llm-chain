@@ -2,8 +2,8 @@
 
 <!-- CI badge will be enabled in Phase 3 once .github/workflows/ci.yml is in place -->
 [![CI](https://img.shields.io/badge/CI-pending-lightgrey.svg)](https://github.com/jw1222/robust-llm-chain/actions)
-[![PyPI](https://img.shields.io/badge/PyPI-0.3.0-blue.svg)](https://pypi.org/project/robust-llm-chain/)
-[![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
+[![PyPI](https://img.shields.io/badge/PyPI-0.3.1-blue.svg)](https://pypi.org/project/robust-llm-chain/)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 > 🇰🇷 한국어 문서: [README_KO.md](README_KO.md) · [ARCHITECTURE_KO.md](ARCHITECTURE_KO.md) · [CONTRIBUTING_KO.md](CONTRIBUTING_KO.md) · [SECURITY_KO.md](SECURITY_KO.md) · [CODE_OF_CONDUCT_KO.md](CODE_OF_CONDUCT_KO.md). 원본 (English) 이 정본.
