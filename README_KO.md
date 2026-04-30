@@ -280,7 +280,7 @@ result.attempts                     # → [
    다중 worker 배포 (gunicorn × 8, 등) 환경에서 대부분의 OSS 라이브러리는 라운드 로빈 인덱스를 프로세스마다 유지한다. 그러면 worker 8개일 때 동시에 8건이 동일 provider 로 떨어질 수 있다. 본 라이브러리는 인덱스를 backend (Memcached 또는 본인이 구현한 `IndexBackend`) 를 통해 공유하므로 부하가 실제로 분산된다.
 
 3. **Cross-vendor (그리고 cross-model) 페일오버.**
-   같은 prompt, 여러 경로. v0.1 활성 provider: **Anthropic Direct + OpenRouter + OpenAI Direct + AWS Bedrock**. 일반적인 패턴:
+   같은 prompt, 여러 경로. 활성 provider: **Anthropic Direct + OpenRouter + OpenAI Direct + AWS Bedrock**. 일반적인 패턴:
    - Claude 의 **same-model 3-way 페일오버** — Anthropic Direct ↔ Bedrock (us-east-1) ↔ OpenRouter
    - Bedrock 내 **cross-region** — `id="bedrock-east"` (`us-east-1`) ↔ `id="bedrock-west"` (`us-west-2`)
    - **Cross-vendor cross-model** — "어떤 답이라도 필요" 할 때, Anthropic 의 Claude ↔ OpenAI 의 GPT
@@ -473,7 +473,7 @@ except ProviderTimeout as e:
 
 ## Status
 
-**v0.1 활성 개발 중.** **Python 3.13 만 테스트됨** (3.12 / 3.11 은 v0.2 / v1.0 에서 추가 예정). Public API 는 1.0 이전에 깨질 수 있으며, 모든 변경은 [CHANGELOG.md](CHANGELOG.md) 에 기록된다.
+**v0.3.x pre-1.0 활성 개발 중.** CI 매트릭스: **Python 3.11 / 3.12 / 3.13**. Public API 는 1.0 이전에 깨질 수 있으며, 모든 변경은 [CHANGELOG.md](CHANGELOG.md) 에 기록된다 (v0.3 에서 두 BREAKING change 있었음 — 마이그레이션 노트 참조).
 
 이는 메인테이너 본인의 dogfooding 을 우선하여 최적화된 개인 프로젝트이다. 외부 기여는 환영하지만 의존하지는 않는다.
 

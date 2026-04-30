@@ -15,8 +15,15 @@
 - `src/robust_llm_chain/types.py:24` `RobustChainInput` + `src/robust_llm_chain/chain.py:57` `_TryFirstChunkResult` 두 alias 를 PEP 695 `type` 키워드 (3.12+) 에서 `TypeAlias` annotation 형태 (3.10+) 로 변환. 의미 동등 변환 — 타입 검사기 동작 동일, 런타임 도입 비용 미미. `tests/test_public_api.py::test_robust_chain_input_alias_importable_from_root` 의 PEP 695 specific `__value__` attribute 검사를 annotation form 에 맞게 약화 (functional 검증으로 대체).
 
 ### Validation
-- 207 unit pass (3.13 + 3.12 venv) / mypy strict 0 / ruff 0 / format 0
+- 207 unit pass (3.13 + 3.12 + 3.11 venv) / mypy strict 0 / ruff 0 / format 0
 - 8 integration + 1 e2e PASS (실제 4-provider API 회귀 보호 유지)
+- 3.11.15 로컬 검증 추가 (`uv python install 3.11` + venv full unit suite)
+
+### Docs — drift 정리 (release 전 가시성)
+- `README.md` / `README_KO.md` Status 섹션: "v0.1 is in active development / Python 3.13 only" → "v0.3.x in pre-1.0 active development / CI matrix Python 3.11 / 3.12 / 3.13"
+- `README.md` / `README_KO.md` line 283 ("v0.1 active providers" → "Active providers")
+- `docs/policies.md` §5.3 Python 매트릭스 표 갱신 (v0.1 ~ v0.3.0 history + v0.3.1+ 현재 + v1.0 추가 검토)
+- `CONTRIBUTING.md` / `CONTRIBUTING_KO.md` Environment setup: `uv run --python 3.11 ...` 후 `.venv` 재생성 시 dev tool 빠질 수 있다는 caveat + `uv sync --all-extras --python ...` 재실행 안내 추가
 
 ## [0.3.0] - 2026-04-29
 

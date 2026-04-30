@@ -37,6 +37,8 @@ make test    # pytest unit only (integration/e2e auto-skip without keys)
 
 `uv.lock` is committed — every contributor uses identical pinned versions. If you need to upgrade a dependency, run `uv lock --upgrade` and explain in the PR description.
 
+> **Switching Python version locally**: if you run `uv run --python 3.11 ...` (or `3.12`) once, uv recreates `.venv` against that interpreter and **dev tools (ruff, mypy, pytest) may drop**. Re-run `uv sync --all-extras --python 3.11` (or `make setup`) before `make check`. CI is unaffected because `uv sync --all-extras --python ${{ matrix.python-version }}` runs first in every matrix job.
+
 ---
 
 ## Contribution types

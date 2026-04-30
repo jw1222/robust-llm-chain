@@ -280,7 +280,7 @@ There are **three ways** to tell `RobustChain` which providers to use. They diff
    In a multi-worker deployment (gunicorn × 8, etc.), most OSS libraries hold the round-robin index per process. With 8 workers that means 8 simultaneous requests can land on the same provider. This library shares the index through a backend (Memcached or your own implementation of `IndexBackend`) so the load actually spreads.
 
 3. **Cross-vendor (and cross-model) failover.**
-   Same prompt, multiple paths. v0.1 active providers: **Anthropic Direct + OpenRouter + OpenAI Direct + AWS Bedrock**. Common patterns:
+   Same prompt, multiple paths. Active providers: **Anthropic Direct + OpenRouter + OpenAI Direct + AWS Bedrock**. Common patterns:
    - **Same-model 3-way failover** for Claude — Anthropic Direct ↔ Bedrock (us-east-1) ↔ OpenRouter
    - **Cross-region** within Bedrock — `id="bedrock-east"` (`us-east-1`) ↔ `id="bedrock-west"` (`us-west-2`)
    - **Cross-vendor cross-model** — Claude on Anthropic ↔ GPT on OpenAI when "we just need *some* answer"
@@ -473,7 +473,7 @@ Module structure, dependency graph, call lifecycle (`acall` / `ainvoke` / `astre
 
 ## Status
 
-**v0.1 is in active development.** Tested on **Python 3.13 only** (3.12 / 3.11 will be added in v0.2 / v1.0). Public API may break before 1.0; all changes will be documented in [CHANGELOG.md](CHANGELOG.md).
+**v0.3.x in pre-1.0 active development.** CI matrix: **Python 3.11 / 3.12 / 3.13**. Public API may break before 1.0; all changes are documented in [CHANGELOG.md](CHANGELOG.md) (v0.3 had two BREAKING changes — see migration notes there).
 
 This is a personal project optimized for the maintainer's own dogfooding. External contributions are welcome but not depended on.
 
