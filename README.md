@@ -9,7 +9,7 @@
 > 🇰🇷 한국어 문서: [README_KO.md](https://github.com/jw1222/robust-llm-chain/blob/main/README_KO.md) · [ARCHITECTURE_KO.md](https://github.com/jw1222/robust-llm-chain/blob/main/ARCHITECTURE_KO.md) · [CONTRIBUTING_KO.md](https://github.com/jw1222/robust-llm-chain/blob/main/CONTRIBUTING_KO.md) · [SECURITY_KO.md](https://github.com/jw1222/robust-llm-chain/blob/main/SECURITY_KO.md) · [CODE_OF_CONDUCT_KO.md](https://github.com/jw1222/robust-llm-chain/blob/main/CODE_OF_CONDUCT_KO.md). 원본 (English) 이 정본.
 
 > **Production-grade cross-vendor failover for LLM APIs.**
-> When your provider hits 529 / pending / throttle, automatically retry on the next vendor — same request, sub-second detection, worker-coordinated round-robin.
+> When your provider hits 529 / pending / throttle, automatically retry on the next vendor — same request, sub-second detection, **worker-coordinated round-robin**.
 
 `robust-llm-chain` is a small, focused Python library that adds **cross-vendor failover** to LLM API calls. It implements LangChain's `Runnable` interface, so it drops into existing chains, while exposing a richer `acall()` API for operational metadata (attempts, cost, usage).
 
@@ -19,7 +19,7 @@ It does one thing well: when Anthropic Direct returns 529 or stalls before the f
 
 ## Why this exists
 
-Two pains that off-the-shelf libraries address only partially:
+Three pains that off-the-shelf libraries address only partially:
 
 ### 1. Anthropic 529 / `Overloaded`
 Anthropic Direct periodically returns `529 Overloaded` during demand spikes. A single retry against the same endpoint usually fails the same way. The right fix is cross-vendor failover — Claude is also reachable through Bedrock and OpenRouter — but most LLM client libraries only retry against the *same* provider.
@@ -27,13 +27,18 @@ Anthropic Direct periodically returns `529 Overloaded` during demand spikes. A s
 ### 2. Streaming "pending" provider
 A provider can accept your request, hold the connection open, and never send the first token. With a 60-second total timeout, you wait the full minute before failing. With a 30-second timeout, you misclassify slow-but-real responses as failures.
 
-`robust-llm-chain` separates the two:
+`robust-llm-chain` separates the two timeouts:
 
 - **`first_token_timeout` (default 15s)** — if no token arrives in this window, give up on this provider and try the next one. Fallback happens before the user notices a delay.
 - **`per_provider_timeout` (default 60s)** — total response budget, applied after the first token has streamed.
 - **`total_timeout`** — wall-clock cap across all attempts.
 
 These two timeouts are the core differentiator: most libraries only have a single overall timeout, so a pending provider burns 30–60 seconds before fallback even starts.
+
+### 3. Multi-worker round-robin fragmentation
+In a multi-worker deployment (gunicorn × 8, FastAPI workers, Celery, etc.), most OSS libraries keep the round-robin index *per process*. Eight workers each with a process-local index means up to eight simultaneous requests can land on the same provider — recreating exactly the single-vendor concentration that cross-vendor failover was supposed to remove. A `429` or `529` event then cascades across workers in lockstep instead of being absorbed by another vendor.
+
+`robust-llm-chain` shares the round-robin index *across* workers through a pluggable `IndexBackend` (Memcached today, your own Redis / etcd / DynamoDB implementation later — see [ARCHITECTURE.md](https://github.com/jw1222/robust-llm-chain/blob/main/ARCHITECTURE.md) for the protocol). Initial-attempt load spreads across the deployment, not just within a single process. If the backend itself goes down, the library raises `BackendUnavailable` rather than silently falling back to a local index — see the fail-closed note in [Advanced usage](#advanced-usage).
 
 ---
 
