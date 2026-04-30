@@ -164,12 +164,19 @@ def test_acall_adapter_build_raw_exception_wraps_into_provider_model_creation_fa
 
 def test_acall_all_adapter_build_failures_raise_all_providers_failed():
     """When every adapter.build() fails, AllProvidersFailed surfaces with
-    ProviderModelCreationFailed-typed attempts (not raw exceptions)."""
+    ProviderModelCreationFailed-typed attempts (not raw exceptions).
+
+    Verifies the full cause chain depth is preserved for debugging:
+        AllProvidersFailed.__cause__       == last ProviderModelCreationFailed
+        ProviderModelCreationFailed.__cause__ == raw SDK exception
+    """
 
     async def _run():
         adapter = _setup()
-        adapter.set_response("p1", build_exception=ValueError("bad model id"))
-        adapter.set_response("p2", build_exception=RuntimeError("region unsupported"))
+        raw_p1 = ValueError("bad model id")
+        raw_p2 = RuntimeError("region unsupported")
+        adapter.set_response("p1", build_exception=raw_p1)
+        adapter.set_response("p2", build_exception=raw_p2)
         chain = RobustChain(providers=[_fake_spec("p1"), _fake_spec("p2")])
 
         try:
@@ -179,10 +186,42 @@ def test_acall_all_adapter_build_failures_raise_all_providers_failed():
             assert all(a.phase == "model_creation" for a in exc.attempts)
             assert all(a.error_type == "ProviderModelCreationFailed" for a in exc.attempts)
             assert all(a.fallback_eligible for a in exc.attempts)
-            # The chained __cause__ preserves the raw SDK exception for debugging.
+            # Layer 1: AllProvidersFailed.__cause__ is the LAST wrapped error.
             assert isinstance(exc.__cause__, ProviderModelCreationFailed)
+            # Layer 2: that wrap preserves the original raw SDK exception.
+            assert exc.__cause__.__cause__ is raw_p2
             return
         raise AssertionError("expected AllProvidersFailed")
+
+    asyncio.run(_run())
+
+
+def test_astream_adapter_build_raw_exception_falls_over_then_recovers():
+    """Streaming path (`_try_first_chunk`) wraps adapter.build() raw exceptions
+    into ProviderModelCreationFailed and falls over to the next provider.
+
+    Mirrors the non-streaming acall regression for the streaming code path —
+    `_try_first_chunk` has its own catch (chain.py:531-541) and must follow
+    the same wrap + fallback contract.
+    """
+
+    async def _run():
+        adapter = _setup()
+        adapter.set_response("p1", build_exception=ValueError("bad model id"))
+        adapter.set_response("p2", chunks=["hi ", "there"])
+        chain = RobustChain(providers=[_fake_spec("p1"), _fake_spec("p2")])
+
+        chunks = [chunk async for chunk in chain.astream("ping")]
+        assert "".join(c.content for c in chunks) == "hi there"
+
+        result = chain.last_result
+        assert result is not None
+        assert result.provider_used.id == "p2"
+        # p1 build wrapped → recorded model_creation attempt; p2 succeeded.
+        assert any(
+            a.phase == "model_creation" and a.error_type == "ProviderModelCreationFailed"
+            for a in result.attempts
+        )
 
     asyncio.run(_run())
 

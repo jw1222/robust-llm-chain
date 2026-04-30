@@ -16,11 +16,17 @@
 `chain._build_model` 가 `adapter.build()` 의 raw SDK / config exception 을 typed `ProviderModelCreationFailed` 로 wrap. 이전에는 `ValueError` / `botocore.errorfactory.ValidationException` 등이 raw 로 새서 외부 사용자가 SDK exception type 을 직접 catch 해야 했음. 이제 라이브러리 contract 안에서 일관되게 처리.
 
 **정책**:
-- wrap 대상: `Exception` 전체 (단 `ProviderInactive` 와 `ProviderModelCreationFailed` 자체는 통과)
+- wrap 대상: `except RobustChainError: raise` → `except Exception` 으로 wrap. **모든 typed library exception** (`ProviderInactive` / `BackendUnavailable` / `ModelNotFound` / `FallbackNotApplicable` / `ProviderModelCreationFailed` 자체) 은 그대로 통과 — 라이브러리 자체 contract 가 silent 하게 다른 fallback semantic 으로 재분류되지 않도록 보호 (R1 codex Important 9/10)
 - `is_fallback_eligible(ProviderModelCreationFailed)` = `True` (multi-provider fault tolerance 의도 보존 — 한 vendor 의 model id wrong / region wrong 같은 config 오류가 다른 vendor 차단하지 않음)
-- `__cause__` chain 에 raw exception 보존 — 디버깅 시 추적 가능
+- `__cause__` chain 에 raw exception 보존 — 디버깅 시 추적 가능 (`AllProvidersFailed.__cause__.__cause__` = raw)
 - `AttemptRecord.phase = "model_creation"` + `error_type = "ProviderModelCreationFailed"` + `fallback_eligible = True` 메타데이터 기록
 - `ProviderInactive` (extras 누락) 는 기존 동작 유지 — fallback NOT eligible, 즉시 raise (사용자 환경 셋팅 오류는 vendor 변경으로 해결 안 됨)
+
+**운영자 모니터링 권장 (R1 codex Important 8/10 — 영구 broken provider 인지)**:
+- `ProviderModelCreationFailed` 가 fallback eligible 이라 사용자 영구 config 오류 (예: 영구 wrong model id) 가 silent 하게 다른 provider 로 fallback 가능. 한 provider 가 영구 broken 이어도 다른 provider 가 받으면 caller 는 에러 안 봄.
+- **운영 monitoring 권장**: `ChainResult.attempts` 에서 `phase=="model_creation"` 발생률 추적. 0% 가 정상, 지속 발생은 ProviderSpec 검토 신호.
+- 모든 provider 가 broken 이면 `AllProvidersFailed` raise — 사용자 인지.
+- 자동 분류 (transient vs permanent config error) 는 신뢰성 한계로 미적용. 향후 사용자 use case 발견 시 재검토.
 
 **회귀 보호**:
 - `tests/test_chain.py::test_acall_adapter_build_raw_exception_wraps_into_provider_model_creation_failed` — `ValueError` raise → 다음 provider 로 fallback

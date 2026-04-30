@@ -40,6 +40,7 @@ from robust_llm_chain.errors import (
     ProviderInactive,
     ProviderModelCreationFailed,
     ProviderTimeout,
+    RobustChainError,
     StreamInterrupted,
     is_fallback_eligible,
 )
@@ -340,12 +341,19 @@ class RobustChain(Runnable[RobustChainInput, BaseMessage]):
     ) -> BaseChatModel | Runnable[Any, Any]:
         adapter = get_adapter(spec.type)
         # Wrap raw SDK / config errors from adapter.build() into the typed
-        # ProviderModelCreationFailed contract. ProviderInactive (extras
-        # missing — environment problem, fallback NOT eligible) and an
-        # already-typed ProviderModelCreationFailed pass through untouched.
+        # ProviderModelCreationFailed contract. Any RobustChainError subclass
+        # (ProviderInactive / BackendUnavailable / ModelNotFound /
+        # FallbackNotApplicable / ProviderModelCreationFailed itself) passes
+        # through untouched — the library's own typed contract must not be
+        # silently re-classified into a different fallback semantic.
+        # Downstream caveat: _failover_loop and _try_first_chunk currently
+        # explicit-handle only ProviderInactive + ProviderModelCreationFailed.
+        # If a future adapter starts raising another RobustChainError subclass
+        # at build() time, add an explicit handler there too — otherwise the
+        # exception escapes the failover loop unrecorded.
         try:
             base = adapter.build(spec)
-        except (ProviderInactive, ProviderModelCreationFailed):
+        except RobustChainError:
             raise
         except Exception as exc:
             raise ProviderModelCreationFailed(
